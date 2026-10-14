@@ -283,6 +283,13 @@ if(NOT ANDROID AND NOT WIN32 AND (NOT APPLE OR IOS))
 	set(HTTPS_NOT_AVAILABLE ON)
 endif()
 
+# Reader fork: a published build (READER_SAVE_SYNC=OFF) has no save sync: no page for it,
+# nothing started, every save where PPSSPP keeps it.
+option(READER_SAVE_SYNC "Save sync (a service of one's own keeps each game's saves)" ON)
+if(NOT READER_SAVE_SYNC)
+	add_compile_definitions(READER_NO_SAVE_SYNC)
+endif()
+
 # Made this flag negative because it's hopefully quite temporary and didn't
 # want to have to update all build systems.
 if(HTTPS_NOT_AVAILABLE)

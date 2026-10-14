@@ -140,6 +140,12 @@ class ReaderSettingsActivity : ReaderScreen() {
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             val section = section(requireArguments().getString(SECTION)) ?: Section.LOOKUP
             setPreferencesFromResource(section.preferences, rootKey)
+            // A published build has no save sync service to send statistics to.
+            if (!org.ppsspp.ppsspp.BuildConfig.READER_SAVE_SYNC) {
+                findPreference<androidx.preference.Preference>("reader_stats_sync_category")?.let {
+                    preferenceScreen.removePreference(it)
+                }
+            }
             findPreference<Preference>("reader_open_anki")?.setOnPreferenceClickListener {
                 startActivity(Intent(requireContext(), AnkiSetupActivity::class.java))
                 true

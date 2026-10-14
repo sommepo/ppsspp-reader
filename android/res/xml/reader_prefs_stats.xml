@@ -32,6 +32,7 @@
         app:title="@string/reader_pref_idle_minutes"
         app:iconSpaceReserved="false" />
     <PreferenceCategory
+        app:key="reader_stats_sync_category"
         app:title="@string/reader_pref_stats_sync"
         app:iconSpaceReserved="false">
         <EditTextPreference

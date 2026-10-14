@@ -712,7 +712,9 @@ UI::ViewGroup *Build(const Host &host) {
 	reader.entries.push_back({"Game scripts", "The games whose text can be read, and scripts to install", ImageID("I_UMD"), Path(), page("games")});
 	reader.entries.push_back({"Dictionaries", "Import and order dictionaries", ImageID("I_FILE_COPY"), Path(), page("dictionaries")});
 	reader.entries.push_back({"Anki", "Where cards go and what is on them", ImageID("I_SEND"), Path(), page("anki")});
+#ifndef READER_NO_SAVE_SYNC
 	reader.entries.push_back({"Save sync", "The same saves on every device of yours", ImageID("I_FOLDER_UPLOAD"), Path(), host.save_sync});
+#endif
 	reader.entries.push_back({"Reader settings", "Lookups, cursor, cards, statistics", ImageID("I_GEAR_SMALL"), Path(), page("settings")});
 
 	Category game{std::string(mm->T("Games")), ImageID("I_UMD")};

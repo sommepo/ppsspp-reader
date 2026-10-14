@@ -290,10 +290,12 @@ void MainScreen::CreateMainButtons(UI::ViewGroup *parent, bool portrait) {
 	parent->Add(portrait ? new Choice(ImageID("I_FILE"), portrait ? new LinearLayoutParams() : nullptr) : new Choice("Reader"))->OnClick.Add([](UI::EventParams &) {
 		Reader::Emu::OpenMenu("settings");
 	});
-	// Reader fork: save sync's page.
+	// Reader fork: save sync's page (not in a published build).
+#ifndef READER_NO_SAVE_SYNC
 	parent->Add(portrait ? new Choice(ImageID("I_FOLDER_UPLOAD"), portrait ? new LinearLayoutParams() : nullptr) : new Choice("Save sync"))->OnClick.Add([this](UI::EventParams &) {
 		screenManager()->push(new ReaderSaveSync::Screen());
 	});
+#endif
 	if (!portrait) {
 		// Reader fork: back to the reader's own main screen.
 		parent->Add(new Choice("PSP menu"))->OnClick.Add([this](UI::EventParams &) {

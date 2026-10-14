@@ -138,6 +138,10 @@ android {
 	}
 
 	defaultConfig {
+		// Reader fork: false in a published build (-PreaderSaveSync=false): no save sync, and
+		// no statistics sent to its service.
+		buildConfigField("boolean", "READER_SAVE_SYNC",
+			(providers.gradleProperty("readerSaveSync").orNull != "false").toString())
 		applicationId = "org.ppsspp.ppsspp"
 		// Access the git version info via the extension
 		if (gitVersionName != "unknown") {
@@ -270,6 +274,10 @@ android {
 					))
 					(project.findProperty("READER_CMAKE_ARGS") as String?)?.let {
 						arguments.addAll(it.split(" ").filter { arg -> arg.isNotBlank() })
+					}
+					// A published build (-PreaderSaveSync=false) has no save sync.
+					if (providers.gradleProperty("readerSaveSync").orNull == "false") {
+						arguments.add("-DREADER_SAVE_SYNC=OFF")
 					}
 				}
 			}

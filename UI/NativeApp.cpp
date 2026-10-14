@@ -763,8 +763,10 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 	// Must be done restarting by now.
 	restarting = false;
 
-	// Reader fork: save sync begins with the app.
+	// Reader fork: save sync begins with the app (not in a published build).
+#ifndef READER_NO_SAVE_SYNC
 	ReaderSaveSync::Start();
+#endif
 }
 
 void CallbackPostRender(UIContext *dc, void *userdata);
@@ -1489,7 +1491,9 @@ void NativeShutdown() {
 	INFO_LOG(Log::System, "NativeShutdown begin");
 
 	// Reader fork: what is still to be sent of a save gets a moment.
+#ifndef READER_NO_SAVE_SYNC
 	ReaderSaveSync::Shutdown();
+#endif
 
 	Achievements::Shutdown();
 

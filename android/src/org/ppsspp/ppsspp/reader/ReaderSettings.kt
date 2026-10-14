@@ -98,7 +98,8 @@ class ReaderSettings(context: Context) {
 
     // ---- Statistics sent to Eden Reader's save sync service ----
     /** The service's addresses as typed ("host:port", several separated by commas); empty: nothing is sent. */
-    val statsServer get() = preferences.getString(KEY_STATS_SERVER, "")!!.trim()
+    val statsServer get() =
+        if (org.ppsspp.ppsspp.BuildConfig.READER_SAVE_SYNC) preferences.getString(KEY_STATS_SERVER, "")!!.trim() else ""
     val statsCode get() = preferences.getString(KEY_STATS_CODE, "")!!.trim()
 
     /** What this device is called where the statistics are added up; its model until a name is entered. */

@@ -380,7 +380,7 @@ class ReaderScreensTest {
                 ReaderSettings.KEY_AUDIO_MAX, ReaderSettings.KEY_AUDIO_LEAD, ReaderSettings.KEY_SCREENSHOT_CACHE,
                 ReaderSettings.KEY_SCREENSHOT_WIDTH,
                 ReaderSettings.KEY_SESSION_HUD, ReaderSettings.KEY_STATS_PAUSED, ReaderSettings.KEY_STATS_BUTTON,
-                ReaderSettings.KEY_IDLE_MINUTES, ReaderSettings.KEY_STATS_SERVER, ReaderSettings.KEY_STATS_CODE,
+                ReaderSettings.KEY_IDLE_MINUTES, "reader_stats_sync_category", ReaderSettings.KEY_STATS_SERVER, ReaderSettings.KEY_STATS_CODE,
                 ReaderSettings.KEY_STATS_DEVICE,
                 ReaderSettings.KEY_HOOK_ENABLED, ReaderSettings.KEY_HOOK_PORT, ReaderSettings.KEY_HOOK_FORMAT,
                 ReaderSettings.KEY_HOOK_SPEAKER, ReaderSettings.KEY_HOOK_LAN, ReaderSettings.KEY_CLIPBOARD_AUTO

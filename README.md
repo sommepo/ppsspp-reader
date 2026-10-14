@@ -24,7 +24,6 @@ For Windows and Android.
   trackpad. Clicking or touching a word works too. Uses Yomitan dictionaries.
 - **Anki cards** with the sentence and a picture of the scene.
 - **Backlog and reading statistics.**
-- **Save sync** between your devices.
 - **The PSP's own XMB** as the main screen.
 - **CRT picture** (optional, in Reader settings).
 

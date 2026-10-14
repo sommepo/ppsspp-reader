@@ -99,8 +99,10 @@ void OnModuleLoaded(const char* name, uint32_t base, uint32_t size, uint32_t crc
 
 void OnExecLoaded() {
     const std::string game_id = g_paramSFO.GetDiscID();
+#ifndef READER_NO_SAVE_SYNC
     // Before the game reads its save: another device's newer one takes its place.
     SaveSync::Host::GameStarting(game_id, g_paramSFO.GetValueString("TITLE"));
+#endif
     Engine& engine = Engine::Instance();
     engine.OnGameLoaded(game_id);
     engine.OnPicture(480, 272);
@@ -116,11 +118,15 @@ void OnExecLoaded() {
 }
 
 void OnSaveWritten() {
+#ifndef READER_NO_SAVE_SYNC
     SaveSync::Host::NoteSaved();
+#endif
 }
 
 void OnShutdown() {
+#ifndef READER_NO_SAVE_SYNC
     SaveSync::Host::GameStopped();
+#endif
     Engine::Instance().OnShutdown();
     g_any_hooks.store(false, std::memory_order_relaxed);
     g_has_main = false;

@@ -6,6 +6,8 @@ statistics.
 
 For Windows and Android.
 
+One of four [reader emulators](https://github.com/sommepo/readers) for PS2, PSP and Dreamcast games.
+
 <table>
   <tr>
     <td width="50%"><img src="docs/reader/media/lookup-demo.gif" alt="Pointing at words in 428's text"><br><sub>Windows: point at a word</sub></td>

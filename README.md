@@ -19,10 +19,9 @@ For Windows and Android.
 
 ## Features
 
-- **Look up words in the game's text.** On a computer, point at a word (hold Shift, or set it
-  to always in Reader settings). On Android, move the cursor onto it with the controller or,
-  on a two-screen handheld, the lower screen as a trackpad. Clicking or touching a word works
-  too. Uses Yomitan dictionaries.
+- **Look up words in the game's text.** On a computer, point at a word. On Android, move the
+  cursor onto it with the controller or, on a two-screen handheld, the lower screen as a
+  trackpad. Clicking or touching a word works too. Uses Yomitan dictionaries.
 - **Anki cards** with the sentence and a picture of the scene.
 - **Backlog and reading statistics.**
 - **Save sync** between your devices.

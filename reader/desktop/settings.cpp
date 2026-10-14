@@ -127,11 +127,12 @@ bool ReaderSettings::PopupHideOnExit() const {
     return Bool(KeyPopupHideOnExit, false);
 }
 QString ReaderSettings::HoverLookup() const {
-    const QString value = String(KeyHoverLookup, QStringLiteral("shift"));
-    if (value == QStringLiteral("off") || value == QStringLiteral("always")) {
+    // Pointing at a word looks it up unless the user chose otherwise.
+    const QString value = String(KeyHoverLookup, QStringLiteral("always"));
+    if (value == QStringLiteral("off") || value == QStringLiteral("shift")) {
         return value;
     }
-    return QStringLiteral("shift");
+    return QStringLiteral("always");
 }
 
 int ReaderSettings::CursorButton() const {

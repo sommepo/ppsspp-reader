@@ -68,8 +68,8 @@ From the [releases](../../releases) of this repository:
 As with PPSSPP, you bring your own games, dumped from your own discs.
 
 **How far it has been tried**: the games were read on Linux in the desktop app and in the
-headless harness; on an AYN Thor, STEINS;GATE and the Da Capo discs were read with the
-second screen's trackpad. The Windows package is built on Linux and **has not yet been started
+headless harness; on an AYN Thor, 428 and STEINS;GATE were read (STEINS;GATE with the second
+screen's trackpad and by touch), and the Game scripts screen fetched the published list. The Windows package is built on Linux and **has not yet been started
 on Windows**. [AGENTS.md](AGENTS.md) and each game's notes in
 [docs/reader/games](docs/reader/games) say what is there and what is not.
 

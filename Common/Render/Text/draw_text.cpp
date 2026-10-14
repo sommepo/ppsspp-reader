@@ -273,7 +273,7 @@ TextDrawer *TextDrawer::Create(Draw::DrawContext *draw) {
 	TextDrawer *drawer = nullptr;
 #if defined(__LIBRETRO__)
 	// No text drawer
-#elif defined(_WIN32) && !PPSSPP_PLATFORM(UWP)
+#elif defined(_WIN32) && !PPSSPP_PLATFORM(UWP) && !defined(USING_QT_UI)  // Reader fork: the Qt frontend draws text with Qt on Windows too
 	drawer = new TextDrawerWin32(draw);
 #elif PPSSPP_PLATFORM(UWP)
 	drawer = new TextDrawerUWP(draw);

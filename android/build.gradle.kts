@@ -68,6 +68,17 @@ dependencies {
 	implementation("androidx.appcompat:appcompat:1.7.1")
 	implementation("androidx.documentfile:documentfile:1.1.0")
 	implementation("com.google.protobuf:protobuf-javalite:4.33.5")
+
+	// Reader fork: what the reading layer's screens are made with, and its JVM tests
+	// (Robolectric supplies SQLite and JsonReader).
+	implementation("com.google.android.material:material:1.12.0")
+	implementation("androidx.preference:preference:1.2.1")
+	implementation("androidx.recyclerview:recyclerview:1.3.2")
+	implementation("androidx.core:core:1.13.1")
+	testImplementation("junit:junit:4.13.2")
+	testImplementation("org.json:json:20240303")
+	testImplementation("org.robolectric:robolectric:4.14.1")
+	testImplementation("androidx.test:core:1.6.1")
 }
 
 protobuf {
@@ -107,7 +118,8 @@ android {
 	}
 
 	compileSdk = 36
-	ndkVersion = "29.0.14206865"
+	// Reader fork: another NDK can be named (-PREADER_NDK=...), to use one that is installed.
+	ndkVersion = (project.findProperty("READER_NDK") as String?) ?: "29.0.14206865"
 
 	compileOptions {
 		sourceCompatibility = JavaVersion.VERSION_11
@@ -116,6 +128,13 @@ android {
 
 	lint {
 		baseline = file("lint-baseline.xml")
+	}
+
+	// Reader fork: JVM tests of the reading layer see the app's resources.
+	testOptions {
+		unitTests {
+			isIncludeAndroidResources = true
+		}
 	}
 
 	defaultConfig {
@@ -166,11 +185,20 @@ android {
 	packaging {
 		jniLibs.useLegacyPackaging = true
 	}
+	// Reader fork: a published build (-PreaderBundleScripts=false) comes with no game scripts;
+	// they are installed from the published list (Game scripts). The patterns before the last
+	// are aapt's own defaults.
+	if (providers.gradleProperty("readerBundleScripts").orNull == "false") {
+		androidResources {
+			ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!<dir>profiles"
+		}
+	}
 	sourceSets {
 		getByName("main") {
 			manifest.srcFile("AndroidManifest.xml")
 			res.directories.add("res")
 			java.directories.add("src")
+			kotlin.directories.add("src")  // Reader fork: the reading layer is Kotlin
 			aidl.directories.add("src")
 			resources.directories.add("src")
 			assets.directories.add("../assets")
@@ -187,6 +215,22 @@ android {
 		}
 		create("legacy") {
 			res.directories.add("legacy/res")
+		}
+		// Reader fork: the JVM tests of the reading layer.
+		getByName("test") {
+			java.directories.add("test")
+			kotlin.directories.add("test")
+			resources.directories.add("test-resources")
+		}
+		// Reader fork: the reader app's own name and its reading layer's resources.
+		create("reader") {
+			res.directories.add("reader/res")
+			// The launcher icon. A set in private/icon, which is not in Git, comes before
+			// the committed one: docs/reader/icon.md.
+			// A published build (-PreaderPrivateIcon=false) always takes the committed one.
+			val own = "../private/icon/android/res"
+			val takeOwn = providers.gradleProperty("readerPrivateIcon").orNull != "false" && file(own).exists()
+			res.directories.add(if (takeOwn) own else "../reader/icon/android/res")
 		}
 	}
 	productFlavors {
@@ -208,6 +252,31 @@ android {
 			ndk {
 				abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86_64"))
 				// debugSymbolLevel = "FULL"  // These don't actually help much in the Google Play crash report. We do still have symbols locally.
+			}
+		}
+		// Reader fork: the app this fork is for. Its own application ID, so that it installs
+		// beside PPSSPP instead of replacing it; the Java namespace stays org.ppsspp.ppsspp.
+		create("reader") {
+			applicationId = "io.github.sommepo.ppssppreader"
+			dimension = "variant"
+			externalNativeBuild {
+				cmake {
+					arguments.addAll(listOf(
+						"-DANDROID=true",
+						"-DANDROID_PLATFORM=android-21",
+						"-DANDROID_TOOLCHAIN=clang",
+						"-DANDROID_CPP_FEATURES=",
+						"-DANDROID_STL=c++_shared"
+					))
+					(project.findProperty("READER_CMAKE_ARGS") as String?)?.let {
+						arguments.addAll(it.split(" ").filter { arg -> arg.isNotBlank() })
+					}
+				}
+			}
+			ndk {
+				abiFilters.addAll(
+					((project.findProperty("READER_ABIS") as String?) ?: "arm64-v8a").split(",")
+				)
 			}
 		}
 		create("gold") {
@@ -285,7 +354,8 @@ androidComponents {
 			"normalDebug", "normalOptimized", "normalRelease",
 			"goldDebug", "goldRelease",
 			"vrDebug", "vrOptimized", "vrRelease",
-			"legacyDebug", "legacyOptimized", "legacyRelease"
+			"legacyDebug", "legacyOptimized", "legacyRelease",
+			"readerDebug", "readerOptimized", "readerRelease"  // Reader fork
 		)
 		variantBuilder.enable = variantBuilder.name in enabledVariants
 	}

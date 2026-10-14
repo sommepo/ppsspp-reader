@@ -312,7 +312,8 @@ static const ConfigSetting generalSettings[] = {
 	ConfigSetting("ScreenRotation", SETTING(g_Config, iScreenRotation), &DefaultScreenRotation, CfgFlag::DEFAULT),
 #endif
 
-	ConfigSetting("BackgroundAnimation", SETTING(g_Config, iBackgroundAnimation), 1, CfgFlag::DEFAULT),
+	// Reader fork: the waves (3), as the PSP's own menu has them.
+	ConfigSetting("BackgroundAnimation", SETTING(g_Config, iBackgroundAnimation), 3, CfgFlag::DEFAULT),
 	ConfigSetting("TransparentBackground", SETTING(g_Config, bTransparentBackground), true, CfgFlag::DEFAULT),
 	ConfigSetting("UITint", SETTING(g_Config, fUITint), 0.0, CfgFlag::DEFAULT),
 	ConfigSetting("UISaturation", SETTING(g_Config, fUISaturation), &DefaultUISaturation, CfgFlag::DEFAULT),
@@ -1135,7 +1136,8 @@ static const ConfigSetting upgradeSettings[] = {
 };
 
 static const ConfigSetting themeSettings[] = {
-	ConfigSetting("ThemeName", SETTING(g_Config, sThemeName), "Default", CfgFlag::DEFAULT),
+	// Reader fork: the PSP-menu look (assets/themes/psp.ini).
+	ConfigSetting("ThemeName", SETTING(g_Config, sThemeName), "PSP", CfgFlag::DEFAULT),
 };
 
 static const ConfigSetting vrSettings[] = {

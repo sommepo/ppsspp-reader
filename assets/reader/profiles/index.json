@@ -1,0 +1,56 @@
+{
+  "format": 1,
+  "system": "psp",
+  "scripts": [
+    {
+      "id": "ULJM05718",
+      "title": "D.C.I&II P.S.P. ～ダ・カーポI&II～ プラスシチュエーション ポータブル, disc 1: D.C.P.S.",
+      "reads": "The message window with speakers and furigana, and choices",
+      "version": "ULJM-05718",
+      "api": 1,
+      "file": "ULJM05718.lua",
+      "size": 11834,
+      "sha256": "1f1103378a6af2e009599f28267b1b8b327480136458043a059bec3d2e5300f6"
+    },
+    {
+      "id": "ULJM05719",
+      "title": "D.C.I&II P.S.P. ～ダ・カーポI&II～ プラスシチュエーション ポータブル, disc 2: D.C.II P.S.",
+      "reads": "The message window with speakers and furigana, and choices",
+      "version": "ULJM-05719",
+      "api": 1,
+      "file": "ULJM05719.lua",
+      "size": 11840,
+      "sha256": "7a2bd3451e5df94b55dff42bf7bec2cc240fc931ad7e38db44ce3f741948a11b"
+    },
+    {
+      "id": "ULJM05821",
+      "title": "CHAOS;HEAD らぶChu☆Chu! (Chaos;Head Love Chu Chu!)",
+      "reads": "The message window and the lines in the middle of the screen, with furigana",
+      "version": "ULJM-05821",
+      "api": 1,
+      "file": "ULJM05821.lua",
+      "size": 8319,
+      "sha256": "7938c5e63294a42d9a2086c26479456516b24eccbda9d1d60b87c3857d6513fe"
+    },
+    {
+      "id": "ULJM05887",
+      "title": "STEINS;GATE (PSP)",
+      "reads": "The message window with speakers and furigana, and the phone's mails",
+      "version": "ULJM-05887",
+      "api": 1,
+      "file": "ULJM05887.lua",
+      "size": 19420,
+      "sha256": "0c270ea507b6423cdfae1c2dace9019214569a35c59415f0bddb6068d6dc14a8"
+    },
+    {
+      "id": "ULJS00219",
+      "title": "428 ～封鎖された渋谷で～ (428: Shibuya Scramble)",
+      "reads": "The story's text with furigana, TIPS and choices",
+      "version": "ULJS-00219, disc version 1.01",
+      "api": 1,
+      "file": "ULJS00219.lua",
+      "size": 16477,
+      "sha256": "de06dab1fcb8115a73c2aacf9f01534a0f7890768f5279f9643939fd3d452109"
+    }
+  ]
+}

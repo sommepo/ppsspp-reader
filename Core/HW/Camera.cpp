@@ -89,7 +89,7 @@ void __cameraDummyImage(int width, int height, unsigned char** outData, int* out
 }
 
 
-#if defined(USING_QT_UI)
+#if defined(USING_QT_UI) && !defined(READER_QT_NO_CAMERA)  // Reader fork
 
 std::vector<std::string> __qt_getDeviceList() {
 	std::vector<std::string> deviceList;

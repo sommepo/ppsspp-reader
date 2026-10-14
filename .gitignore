@@ -151,3 +151,14 @@ RAPrefs_PPSSPP.cfg
 cmake-build-*/
 
 /.vscode/
+
+# Reader fork
+/private/
+/build-host/
+/build-desktop/
+/build-windows/
+__pycache__/
+
+# Reader fork: Android build outputs
+/android/versionname.txt
+/android/versioncode.txt

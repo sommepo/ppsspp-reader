@@ -101,6 +101,8 @@
 #include "Core/SaveState.h"
 #include "Core/Screenshot.h"
 #include "Core/System.h"
+#include "reader/core/emulator.h"  // Reader fork
+#include "reader/ui/save_sync_screen.h"  // Reader fork
 #include "Core/HLE/__sceAudio.h"
 #include "Core/HLE/sceCtrl.h"
 #include "Core/HLE/sceUsbCam.h"
@@ -760,6 +762,9 @@ void NativeInit(int argc, const char *argv[], const char *savegame_dir, const ch
 
 	// Must be done restarting by now.
 	restarting = false;
+
+	// Reader fork: save sync begins with the app.
+	ReaderSaveSync::Start();
 }
 
 void CallbackPostRender(UIContext *dc, void *userdata);
@@ -1128,7 +1133,10 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 		g_screenManager->resized();
 
 		// TODO: Move this to the GraphicsContext objects for each backend.
-#if !PPSSPP_PLATFORM(WINDOWS) && !defined(ANDROID)
+		// Reader fork: the Qt frontend relies on this on Windows too (the emulator's own
+		// Windows frontend, which is left out here, says it itself). Without it the game's
+		// picture kept the size it had at the game's start when the window was resized.
+#if (!PPSSPP_PLATFORM(WINDOWS) || defined(USING_QT_UI)) && !defined(ANDROID)
 		PSP_CoreParameter().pixelWidth = g_display.pixel_xres;
 		PSP_CoreParameter().pixelHeight = g_display.pixel_yres;
 		System_PostUIMessage(UIMessage::GPU_DISPLAY_RESIZED);
@@ -1287,6 +1295,12 @@ static void ProcessWheelRelease(InputKeyCode keyCode, double now, bool keyPress)
 }
 
 bool NativeKey(const KeyInput &key) {
+	// Reader fork: the reader's own buttons (its cursor, its statistics) do not reach the game.
+	const int readerFlags = (int)key.flags;
+	if (!(readerFlags & (int)KeyInputFlags::IS_REPEAT) && (readerFlags & ((int)KeyInputFlags::DOWN | (int)KeyInputFlags::UP)) &&
+		Reader::Emu::FilterKey((int)key.deviceId, (int)key.keyCode, (readerFlags & (int)KeyInputFlags::DOWN) != 0)) {
+		return true;
+	}
 	double now = time_now_d();
 
 	// VR actions
@@ -1473,6 +1487,9 @@ bool NativeIsRestarting() {
 
 void NativeShutdown() {
 	INFO_LOG(Log::System, "NativeShutdown begin");
+
+	// Reader fork: what is still to be sent of a save gets a moment.
+	ReaderSaveSync::Shutdown();
 
 	Achievements::Shutdown();
 

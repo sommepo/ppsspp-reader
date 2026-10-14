@@ -35,6 +35,7 @@
 #include "Common/TimeUtil.h"
 
 #include "Core/SaveState.h"
+#include "reader/core/emulator.h"  // Reader fork
 #include "Core/Config.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
@@ -831,6 +832,7 @@ int g_screenshotFailures;
 					callbackMessage = op.slot != LOAD_UNDO_SLOT ? sc->T("Loaded State") : sc->T("State load undone");
 					callbackResult = TriggerLoadWarnings(callbackMessage);
 					hasLoadedState = true;
+					Reader::Emu::OnStateLoaded();  // Reader fork
 					Core_ResetException();
 
 					if (!slot_prefix.empty())
@@ -914,6 +916,7 @@ int g_screenshotFailures;
 					callbackMessage = sc->T("Loaded State");
 					callbackResult = Status::SUCCESS;
 					hasLoadedState = true;
+					Reader::Emu::OnStateLoaded();  // Reader fork
 					Core_ResetException();
 				} else if (result == CChunkFileReader::ERROR_BROKEN_STATE) {
 					// Cripes.  Good news is, we might have more.  Let's try those too, better than a reset.
@@ -922,6 +925,7 @@ int g_screenshotFailures;
 						callbackMessage = sc->T("Loaded State");
 						callbackResult = Status::SUCCESS;
 						hasLoadedState = true;
+						Reader::Emu::OnStateLoaded();  // Reader fork
 						Core_ResetException();
 					} else {
 						callbackMessage = std::string(i18nLoadFailure) + ": " + errorString;

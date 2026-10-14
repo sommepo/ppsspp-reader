@@ -26,6 +26,7 @@
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceCtrl.h"
+#include "reader/core/emulator.h"  // Reader fork
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceKernelThread.h"
 #include "Core/HLE/sceKernelInterrupt.h"
@@ -217,6 +218,11 @@ void __CtrlUpdateButtons(u32 bitsToSet, u32 bitsToClear)
 
 void __CtrlSetAnalogXY(int stick, float x, float y)
 {
+	// Reader fork: while the reader's cursor has the sticks, the game sees them at rest.
+	if (Reader::Emu::FilterStick(stick, x, y)) {
+		x = 0.0f;
+		y = 0.0f;
+	}
 	u8 scaledX = clamp_u8((int)ceilf(x * 127.5f + 127.5f));
 	// TODO: We might have too many negations of Y...
 	u8 scaledY = clamp_u8((int)ceilf(-y * 127.5f + 127.5f));

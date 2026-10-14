@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Files the reader hands to other apps: card media for AnkiDroid and statistics exports. -->
+<paths>
+    <cache-path name="reader_media" path="reader/media/" />
+    <cache-path name="reader_export" path="reader/export/" />
+</paths>

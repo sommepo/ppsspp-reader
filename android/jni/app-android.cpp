@@ -244,9 +244,14 @@ void Android_DetachThreadFromJNI() {
 	}
 }
 
+// Reader fork: the reader's bridge (reader_jni.cpp) is only ever called from Java. Naming
+// something of it here keeps the linker from leaving it out.
+void ReaderJni_Link();
+
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *pjvm, void *reserved) {
 	INFO_LOG(Log::System, "JNI_OnLoad");
 	gJvm = pjvm;  // cache the JavaVM pointer
+	ReaderJni_Link();
 	auto env = getEnv();
 	//replace with one of your classes in the line below
 	auto randomClass = env->FindClass("org/ppsspp/ppsspp/PpssppActivity");

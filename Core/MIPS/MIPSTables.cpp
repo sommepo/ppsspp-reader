@@ -29,6 +29,7 @@
 #include "Core/CoreTiming.h"
 #include "Core/Reporting.h"
 #include "Core/Debugger/Breakpoints.h"
+#include "reader/core/emulator.h"  // Reader fork
 
 #include "JitCommon/JitCommon.h"
 
@@ -1000,6 +1001,10 @@ static void RunUntilWithChecks(u64 globalTicks) {
 			// Replacements and similar are processed here, intentionally.
 			MIPSOpcode op = MIPSOpcode(Memory::Read_U32(curMips->pc));
 			const MIPSInstruction *instr = MIPSGetInstruction(op);
+
+			// Reader fork: a text profile's hook on this instruction.
+			if (Reader::Emu::IsHooked(curMips->pc))
+				Reader::Emu::DispatchHook(curMips->pc);
 
 			// Check for breakpoint
 			if (hasBPs && g_breakpoints.IsAddressBreakPoint(curMips->pc) && g_breakpoints.CheckSkipFirst() != curMips->pc) {

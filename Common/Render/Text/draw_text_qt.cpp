@@ -16,7 +16,7 @@
 #include <QtGui/QPainter>
 #include <QtGui/QFontMetrics>
 #include <QFontDatabase>
-#include <QtOpenGL/QGLWidget>
+#include <QtGui/QImage>  // Reader fork: Qt 6 has no QGLWidget, and nothing of it was used here
 
 TextDrawerQt::TextDrawerQt(Draw::DrawContext *draw) : TextDrawer(draw) {
 	// Add all fonts we ship with.

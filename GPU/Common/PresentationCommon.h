@@ -34,8 +34,11 @@ struct PostShaderUniforms {
 	float time[4];
 	float timeDelta[4];
 	float setting[4];
-	float video; float pad[3];
-	float vr;
+	// Reader fork: `vr` directly after `video`, which is where the uniform block the
+	// shaders are given has it (Common/GPU/ShaderTranslation.cpp), and after them the eight
+	// vectors of the reader's CRT picture (reader/core/crt.h).
+	float video; float vr; float pad[2];
+	float crt[8][4];
 	// Used on Direct3D9.
 	float gl_HalfPixel[4];
 };

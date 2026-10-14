@@ -38,6 +38,7 @@
 #include "Core/HLE/sceKernelTime.h"
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/__sceAudio.h"
+#include "reader/core/emulator.h"  // Reader fork
 #include "Core/HLE/sceAudio.h"
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceKernelThread.h"
@@ -424,6 +425,9 @@ void __AudioUpdate(bool resetRecording) {
 		// Nothing was written above, let's memset.
 		memset(mixBuffer, 0, hwBlockSize * 2 * sizeof(s32));
 	}
+
+	// Reader fork: the reader keeps the last while of sound for a card's audio.
+	Reader::Emu::OnAudio(mixBuffer, hwBlockSize);
 
 	if (g_Config.bEnableSound) {
 		float multiplier = Volume100ToMultiplier(std::clamp(g_Config.iGameVolume, 0, VOLUMEHI_FULL));

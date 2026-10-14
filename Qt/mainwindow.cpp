@@ -3,7 +3,11 @@
 
 #include <QApplication>
 #include <QDesktopServices>
-#include <QDesktopWidget>
+#include <QScreen>
+
+#include "reader/qt/install.h"  // Reader fork
+
+QMainWindow *g_mainWindowForWin32 = nullptr;  // Reader fork
 #include <QFile>
 #include <QFileDialog>
 #include <QMessageBox>
@@ -37,13 +41,19 @@ MainWindow::MainWindow(QWidget *parent, bool fullscreen) :
 #else
 	setWindowIcon(QIcon(qApp->applicationDirPath() + "/assets/ui_images/icon.png"));
 #endif
+	// Reader fork: the app's own icon (docs/reader/icon.md).
+	qApp->setWindowIcon(QIcon(QStringLiteral(":/reader/icon/app.png")));
+	setWindowIcon(qApp->windowIcon());
 
 	SetGameTitle("");
 	emugl = new MainUI(this);
+	g_mainWindowForWin32 = this;  // Reader fork: see Qt/windows_support.cpp
 
 	setCentralWidget(emugl);
 	createMenus();
 	updateMenus();
+	// Reader fork: the reading layer, with its menu beside the others.
+	ReaderUi::Install(this, emugl);
 
 	SetFullScreen(fullscreen);
 
@@ -57,11 +67,15 @@ inline float clamp1(float x) {
 	return x;
 }
 
+// Reader fork: the pointer stays over a game in full screen, where upstream blanks it: a word
+// is looked up by pointing at it.
+static const bool kBlankPointerInGame = false;
+
 void MainWindow::newFrame()
 {
 	if (lastUIState != GetUIState()) {
 		lastUIState = GetUIState();
-		if (lastUIState == UISTATE_INGAME && g_Config.bFullScreen && !QApplication::overrideCursor() && !g_Config.bShowTouchControls)
+		if (kBlankPointerInGame && lastUIState == UISTATE_INGAME && g_Config.bFullScreen && !QApplication::overrideCursor() && !g_Config.bShowTouchControls)
 			QApplication::setOverrideCursor(QCursor(Qt::BlankCursor));
 		if (lastUIState != UISTATE_INGAME && g_Config.bFullScreen && QApplication::overrideCursor())
 			QApplication::restoreOverrideCursor();
@@ -354,9 +368,7 @@ void MainWindow::dumpNextAct()
 
 void MainWindow::consoleAct()
 {
-#if PPSSPP_PLATFORM(WINDOWS)
-	LogManager::GetInstance()->GetConsoleListener()->Show(LogManager::GetInstance()->GetConsoleListener()->Hidden());
-#endif
+	// Reader fork: the call that was here (for Windows) is to a log manager that no longer exists.
 }
 
 void MainWindow::raiseTopMost()
@@ -381,7 +393,7 @@ void MainWindow::SetFullScreen(bool fullscreen) {
 
 		showFullScreen();
 
-		if (GetUIState() == UISTATE_INGAME && !g_Config.bShowTouchControls)
+		if (kBlankPointerInGame && GetUIState() == UISTATE_INGAME && !g_Config.bShowTouchControls)
 			QApplication::setOverrideCursor(QCursor(Qt::BlankCursor));
 	} else {
 #if !PPSSPP_PLATFORM(MAC)
@@ -395,11 +407,11 @@ void MainWindow::SetFullScreen(bool fullscreen) {
 		if (GetUIState() == UISTATE_INGAME && QApplication::overrideCursor())
 			QApplication::restoreOverrideCursor();
 
-		QDesktopWidget *desktop = QApplication::desktop();
+		const QList<QScreen *> screens = QGuiApplication::screens();
 		int screenNum = QProcessEnvironment::systemEnvironment().value("SDL_VIDEO_FULLSCREEN_HEAD", "0").toInt();
 
 		// Move window to the center of selected screen
-		QRect rect = desktop->screenGeometry(screenNum);
+		QRect rect = screens.value(screenNum, QGuiApplication::primaryScreen())->geometry();
 		move((rect.width() - frameGeometry().width()) / 4, (rect.height() - frameGeometry().height()) / 4);
 	}
 }
@@ -485,10 +497,14 @@ void MainWindow::SetWindowScale(int zoom) {
 	g_Config.iWindowHeight = height;
 
 #if !PPSSPP_PLATFORM(MAC)
-	emugl->setFixedSize(g_Config.iWindowWidth, g_Config.iWindowHeight);
-	// TODO: Shouldn't this be scaled size?
-	emugl->resizeGL(g_Config.iWindowWidth, g_Config.iWindowHeight);
-	setFixedSize(sizeHint());
+	// Reader fork: the window takes this size and can then be resized by its edges like any
+	// other (it was of a fixed size: only the menu's zoom levels changed it). The picture
+	// keeps its shape inside it, by the emulator's own display layout.
+	emugl->setMinimumSize(240, 136);
+	emugl->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+	setMinimumSize(0, 0);
+	setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+	resize(g_Config.iWindowWidth, g_Config.iWindowHeight + (menuBar()->isHidden() ? 0 : menuBar()->sizeHint().height()));
 #else
 	resize(g_Config.iWindowWidth, g_Config.iWindowHeight);
 #endif

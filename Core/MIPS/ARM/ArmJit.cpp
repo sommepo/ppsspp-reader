@@ -29,6 +29,7 @@
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
 #include "Core/Debugger/Breakpoints.h"
+#include "reader/core/emulator.h"  // Reader fork
 #include "Core/Debugger/SymbolMap.h"
 #include "Core/MemMap.h"
 
@@ -712,7 +713,8 @@ void ArmJit::WriteSyscallExit()
 }
 
 bool ArmJit::CheckJitBreakpoint(u32 addr, int downcountOffset) {
-	if (g_breakpoints.IsAddressBreakPoint(addr)) {
+	// Reader fork: an address a text profile hooks is compiled like a breakpoint.
+	if (g_breakpoints.IsAddressBreakPoint(addr) || Reader::Emu::IsHooked(addr)) {
 		MRS(R8);
 		FlushAll();
 		MOVI2R(SCRATCHREG1, GetCompilerPC());

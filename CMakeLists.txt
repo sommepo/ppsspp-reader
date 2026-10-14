@@ -1382,6 +1382,7 @@ endif()
 if(ANDROID)
 	list(APPEND NativeAppSource
 		android/jni/app-android.cpp
+		android/jni/reader_jni.cpp  # Reader fork
 		android/jni/AndroidJavaGLContext.cpp
 		android/jni/AndroidJavaGLContext.h
 		android/jni/AndroidVulkanContext.cpp
@@ -1460,14 +1461,44 @@ elseif(IOS AND LIBRETRO)
 	list(APPEND nativeExtraLibs "-framework GLKit")
 elseif(USING_QT_UI)
 	set(CMAKE_AUTOMOC ON)
-	find_package(Qt5 COMPONENTS OpenGL Gui Core Multimedia)
+	# Reader fork: Qt 6 (the reader's windows are written for it).
+	find_package(Qt6 REQUIRED COMPONENTS OpenGL OpenGLWidgets Widgets Gui Core Network)
 	list(APPEND NativeAppSource
 		Qt/QtMain.cpp
 		Qt/QtMain.h
 		Qt/mainwindow.cpp
 		Qt/mainwindow.h
 	)
-	add_compile_definitions(USING_QT_UI)
+	# Reader fork: the Qt frontend on Windows, and the few helpers of the Windows frontend
+	# that the shared code calls there (camera and microphone, the folder dialog).
+	if(WIN32)
+		list(APPEND NativeAppSource
+			Qt/windows_support.cpp
+			Windows/CaptureDevice.cpp
+			Windows/CaptureDevice.h
+			Windows/W32Util/ShellUtil.cpp
+			Windows/W32Util/ShellUtil.h
+			Windows/W32Util/Misc.cpp
+			Windows/W32Util/Misc.h
+		)
+		list(APPEND nativeExtraLibs mfplat mfreadwrite mfuuid mf shlwapi ole32 oleaut32 uuid comdlg32 dwmapi)
+	endif()
+	add_compile_definitions(USING_QT_UI READER_QT_NO_CAMERA)
+	# Reader fork: the app's own icon, for the window (reader/CMakeLists.txt) and the Windows
+	# program (reader/qt/app.rc). A set in private/icon, which is not in Git, comes before
+	# the committed one: docs/reader/icon.md.
+	# A published build (READER_PRIVATE_ICON=OFF) always takes the committed one.
+	option(READER_PRIVATE_ICON "Take the icon in private/icon when there is one" ON)
+	set(READER_ICON_DIR "${CMAKE_SOURCE_DIR}/reader/icon")
+	if(READER_PRIVATE_ICON AND EXISTS "${CMAKE_SOURCE_DIR}/private/icon/app.ico")
+		set(READER_ICON_DIR "${CMAKE_SOURCE_DIR}/private/icon")
+	endif()
+	foreach(_file app.ico app.png)
+		configure_file("${READER_ICON_DIR}/${_file}" "${CMAKE_BINARY_DIR}/reader_icon/${_file}" COPYONLY)
+	endforeach()
+	if(WIN32)
+		list(APPEND NativeAppSource reader/qt/app.rc)
+	endif()
 	if(USING_GLES2)
 		add_compile_definitions(QT_OPENGL_ES QT_OPENGL_ES_2)
 	endif()
@@ -1481,7 +1512,7 @@ elseif(USING_QT_UI)
 	endif()
 	include_directories(Qt)
 	include_directories(${CMAKE_CURRENT_BINARY_DIR})
-	list(APPEND nativeExtraLibs Qt5::OpenGL Qt5::Gui Qt5::Core Qt5::Multimedia)
+	list(APPEND nativeExtraLibs Qt6::OpenGL Qt6::OpenGLWidgets Qt6::Widgets Qt6::Gui Qt6::Core Qt6::Network)
 	set(TargetBin PPSSPPQt)
 
 	# Enable SDL joystick if SDL is found
@@ -1575,7 +1606,8 @@ else()
 endif()
 
 if(WIN32)
-	target_link_libraries(Common winmm dsound dxguid Version)
+	# Reader fork: "version", as MinGW on a system that tells upper from lower case has it
+	target_link_libraries(Common winmm dsound dxguid version)
 endif()
 
 if(NOT LIBRETRO)
@@ -1626,6 +1658,10 @@ list(APPEND NativeAppSource
 	UI/IAPScreen.h
 	UI/MainScreen.h
 	UI/MainScreen.cpp
+	reader/ui/save_sync_screen.cpp  # Reader fork
+	reader/ui/save_sync_screen.h
+	reader/ui/xmb.cpp  # Reader fork
+	reader/ui/xmb.h
 	UI/GameBrowser.h
 	UI/GameBrowser.cpp
 	UI/MiscScreens.h
@@ -2755,7 +2791,8 @@ setup_target_project(${CoreLibName} Core)
 add_custom_target(GitVersion DEPENDS something_that_never_exists)
 
 set(WIN_VERSION_CMD "")
-if (WIN32)
+# Reader fork: not when the build for Windows is made on another system (the script is a .cmd).
+if (WIN32 AND CMAKE_HOST_WIN32)
 	set(WIN_VERSION_CMD COMMAND ${CMAKE_SOURCE_DIR}/Windows/git-version-gen.cmd PPSSPPWindows)
 endif()
 
@@ -2879,7 +2916,8 @@ endif()
 
 list(APPEND LinkCommon ${CoreLibName} ${CMAKE_THREAD_LIBS_INIT})
 
-if(WIN32)
+# Reader fork: not with the Qt frontend, which is the whole of the app on Windows too.
+if(WIN32 AND NOT USING_QT_UI)
 	#setup_target_project(${TargetBin} Windows)
 	list(APPEND NativeAppSource ${WindowsFiles})
 endif()
@@ -3090,6 +3128,9 @@ if(TargetBin)
 	endif()
 	target_link_libraries(${TargetBin} ${LinkCommon} Common)
 endif()
+
+# Reader fork: the reading layer (text engine, harness, tests) is in a directory of its own.
+add_subdirectory(reader)
 
 # installs
 if(NOT ANDROID)

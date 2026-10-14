@@ -1,0 +1,3 @@
+// The Windows program's icon: the build puts the app's icon into its folder
+// (docs/reader/icon.md). Qt takes IDI_ICON1 for the program's windows.
+IDI_ICON1               ICON                    "reader_icon/app.ico"

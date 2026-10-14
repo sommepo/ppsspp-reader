@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reader settings, the page "Statistics options". -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <SwitchPreferenceCompat
+        app:key="reader_session_hud"
+        app:defaultValue="true"
+        app:title="@string/reader_pref_session_hud"
+        app:summary="@string/reader_pref_session_hud_summary"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_stats_paused"
+        app:defaultValue="false"
+        app:title="@string/reader_pref_stats_paused"
+        app:summary="@string/reader_pref_stats_paused_summary"
+        app:iconSpaceReserved="false" />
+    <ListPreference
+        app:key="reader_stats_button"
+        app:defaultValue="-1"
+        app:entries="@array/reader_cursor_button_entries"
+        app:entryValues="@array/reader_cursor_button_values"
+        app:title="@string/reader_pref_stats_button"
+        app:useSimpleSummaryProvider="true"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_idle_minutes"
+        app:defaultValue="5"
+        app:min="1"
+        android:max="30"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_idle_minutes"
+        app:iconSpaceReserved="false" />
+    <PreferenceCategory
+        app:title="@string/reader_pref_stats_sync"
+        app:iconSpaceReserved="false">
+        <EditTextPreference
+            app:key="reader_stats_server"
+            app:defaultValue=""
+            app:title="@string/reader_pref_stats_server"
+            app:summary="@string/reader_pref_stats_server_summary"
+            app:iconSpaceReserved="false" />
+        <EditTextPreference
+            app:key="reader_stats_code"
+            app:defaultValue=""
+            app:title="@string/reader_pref_stats_code"
+            app:iconSpaceReserved="false" />
+        <EditTextPreference
+            app:key="reader_stats_device"
+            app:defaultValue=""
+            app:title="@string/reader_pref_stats_device"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+</PreferenceScreen>

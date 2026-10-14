@@ -899,8 +899,14 @@ bool IsMOQII7S(std::string_view name) {
 	return name == "MOQI:I7S";
 }
 
+// Reader fork: more handhelds whose controls are built in (the AYN Thor and Odin, AYANEO's).
+static bool IsOtherHandheld(std::string_view name) {
+	return name.find("AYN") != std::string_view::npos || name.find("AYANEO") != std::string_view::npos ||
+		name.find("Odin") != std::string_view::npos;
+}
+
 bool HasBuiltinController(std::string_view name) {
-	return IsXperiaPlay(name) || IsNvidiaShield(name) || IsMOQII7S(name) || IsRetroid(name);
+	return IsXperiaPlay(name) || IsNvidiaShield(name) || IsMOQII7S(name) || IsRetroid(name) || IsOtherHandheld(name);
 }
 
 void NotifyPadConnected(InputDeviceID deviceId, std::string_view name) {

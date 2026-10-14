@@ -83,6 +83,15 @@ cbuffer data : register(b0) {
 	float4 u_setting;
 	float u_video;
 	float u_vr;
+	// Reader fork: the CRT picture's eight vectors (PostShaderUniforms)
+	float4 u_crt0;
+	float4 u_crt1;
+	float4 u_crt2;
+	float4 u_crt3;
+	float4 u_crt4;
+	float4 u_crt5;
+	float4 u_crt6;
+	float4 u_crt7;
 };
 )";
 
@@ -101,6 +110,15 @@ layout (std140, set = 0, binding = 0) uniform Data {
 	vec4 u_setting;
 	float u_video;
 	float u_vr;
+	// Reader fork: the CRT picture's eight vectors (PostShaderUniforms)
+	vec4 u_crt0;
+	vec4 u_crt1;
+	vec4 u_crt2;
+	vec4 u_crt3;
+	vec4 u_crt4;
+	vec4 u_crt5;
+	vec4 u_crt6;
+	vec4 u_crt7;
 };
 )";
 

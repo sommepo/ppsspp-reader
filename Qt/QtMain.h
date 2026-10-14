@@ -5,11 +5,13 @@
 #include <QMouseEvent>
 #include <QInputDialog>
 #include "Common/GPU/OpenGL/GLSLProgram.h"
-#include <QGLWidget>
+#include <QOpenGLWidget>  // Reader fork: Qt 6
 
 #ifndef SDL
-#include <QAudioOutput>
+#ifndef SDL
+#include <QAudioSink>
 #include <QAudioFormat>
+#endif
 #endif
 #if defined(MOBILE_DEVICE)
 #include <QAccelerometer>
@@ -99,7 +101,7 @@ enum class EmuThreadState {
 
 
 // GUI, thread manager
-class MainUI : public QGLWidget
+class MainUI : public QOpenGLWidget
 {
 	Q_OBJECT
 public:
@@ -174,7 +176,7 @@ protected:
 	void timerEvent(QTimerEvent *);
 private:
 	QIODevice* feed;
-	QAudioOutput* output;
+	QAudioSink* output;
 	int mixlen;
 	char* mixbuf;
 	int timer;

@@ -31,7 +31,8 @@ extern "C" {
 
 void __cameraDummyImage(int width, int height, unsigned char** outData, int* outLen);
 
-#if defined(USING_QT_UI)
+// Reader fork: the Qt frontend is built with Qt 6, which has no QAbstractVideoSurface: no camera there.
+#if defined(USING_QT_UI) && !defined(READER_QT_NO_CAMERA)
 #include <QAbstractVideoSurface>
 #include <QCameraInfo>
 

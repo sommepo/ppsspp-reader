@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reader settings, the page "Text output". -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <SwitchPreferenceCompat
+        app:key="reader_texthook_enabled"
+        app:defaultValue="false"
+        app:title="@string/reader_pref_hook_enabled"
+        app:summary="@string/reader_pref_hook_enabled_summary"
+        app:iconSpaceReserved="false" />
+    <EditTextPreference
+        app:key="reader_texthook_port"
+        app:defaultValue="6677"
+        app:dependency="reader_texthook_enabled"
+        app:title="@string/reader_pref_hook_port"
+        app:useSimpleSummaryProvider="true"
+        app:iconSpaceReserved="false" />
+    <ListPreference
+        app:key="reader_texthook_format"
+        app:defaultValue="plain"
+        app:dependency="reader_texthook_enabled"
+        app:entries="@array/reader_hook_format_entries"
+        app:entryValues="@array/reader_hook_format_values"
+        app:title="@string/reader_pref_hook_format"
+        app:useSimpleSummaryProvider="true"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_texthook_speaker"
+        app:defaultValue="false"
+        app:dependency="reader_texthook_enabled"
+        app:title="@string/reader_pref_hook_speaker"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_texthook_lan"
+        app:defaultValue="false"
+        app:dependency="reader_texthook_enabled"
+        app:title="@string/reader_pref_hook_lan"
+        app:summary="@string/reader_pref_hook_lan_summary"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_clipboard_auto"
+        app:defaultValue="false"
+        app:title="@string/reader_pref_clipboard_auto"
+        app:iconSpaceReserved="false" />
+</PreferenceScreen>

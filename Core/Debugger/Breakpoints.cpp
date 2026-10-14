@@ -29,6 +29,7 @@
 #include "Core/MIPS/MIPSDebugInterface.h"
 #include "Core/MIPS/JitCommon/JitCommon.h"
 #include "Core/CoreTiming.h"
+#include "reader/core/emulator.h"  // Reader fork
 
 BreakpointManager g_breakpoints;
 
@@ -285,6 +286,9 @@ void BreakpointManager::ChangeBreakPointLogFormat(u32 addr, const std::string &f
 }
 
 BreakAction BreakpointManager::ExecBreakPoint(u32 addr) {
+	// Reader fork: a text profile's hooks are reached the way breakpoints are.
+	if (Reader::Emu::IsHooked(addr))
+		Reader::Emu::DispatchHook(addr);
 	if (!anyBreakPoints_)
 		return BREAK_ACTION_IGNORE;
 	std::unique_lock<std::mutex> guard(breakPointsMutex_);

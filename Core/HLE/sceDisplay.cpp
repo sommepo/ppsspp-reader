@@ -46,6 +46,7 @@
 #include "Core/HLE/ErrorCodes.h"
 #include "Core/HLE/FunctionWrappers.h"
 #include "Core/HLE/sceDisplay.h"
+#include "reader/core/emulator.h"  // Reader fork
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceNet.h"
 #include "Core/HLE/sceKernelThread.h"
@@ -515,6 +516,9 @@ void hleEnterVblank(u64 userdata, int cyclesLate) {
 	int vbCount = userdata;
 
 	VERBOSE_LOG(Log::sceDisplay, "Enter VBlank %i", vbCount);
+
+	// Reader fork: text profiles look at the game once per frame.
+	Reader::Emu::OnFrame();
 
 	DisplayFireVblankStart();
 

@@ -27,6 +27,7 @@
 #include "Core/Reporting.h"
 #include "Core/System.h"
 #include "Core/Debugger/MemBlockInfo.h"
+#include "reader/core/emulator.h"  // Reader fork
 #include "Core/Dialog/SavedataParam.h"
 #include "Core/Dialog/PSPSaveDialog.h"
 #include "Core/FileSystems/MetaFileSystem.h"
@@ -612,6 +613,8 @@ int SavedataParam::Save(SceUtilitySavedataParam* param, const std::string &saveD
 			WritePSPFile(snd0path, param->snd0FileData.buf, param->snd0FileData.size);
 		}
 	}
+	// Reader fork: save sync sends the save a moment after it was written.
+	Reader::Emu::OnSaveWritten();
 	return 0;
 }
 

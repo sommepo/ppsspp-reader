@@ -8,7 +8,6 @@
 #include "ppsspp_config.h"
 #include <QApplication>
 #include <QClipboard>
-#include <QDesktopWidget>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -22,6 +21,8 @@
 
 #if QT_VERSION > QT_VERSION_CHECK(5, 0, 0)
 #include <QStandardPaths>
+
+#include "reader/qt/install.h"  // Reader fork
 #ifdef QT_HAS_SYSTEMINFO
 #include <QScreenSaver>
 #endif
@@ -47,6 +48,8 @@
 #include "Common/Data/Encoding/Utf8.h"
 #include "Common/StringUtils.h"
 #include "Common/TimeUtil.h"
+#include "Common/File/VFS/DirectoryReader.h"  // Reader fork
+#include "Common/File/VFS/VFS.h"  // Reader fork
 #include "Common/Log/LogManager.h"
 
 #include "Core/Config.h"
@@ -236,7 +239,9 @@ float System_GetPropertyFloat(SystemProperty prop) {
 	case SYSPROP_DISPLAY_LOGICAL_DPI:
 		return QApplication::primaryScreen()->logicalDotsPerInch();
 	case SYSPROP_DISPLAY_DPI:
-		return QApplication::primaryScreen()->physicalDotsPerInch();
+		// Reader fork: Qt 6 scales a window itself. A unit of the interface is one of Qt's
+		// own (scaled) pixels, whatever the monitor's real density.
+		return QApplication::primaryScreen()->logicalDotsPerInch() * QApplication::primaryScreen()->devicePixelRatio();
 	case SYSPROP_DISPLAY_SAFE_INSET_LEFT:
 	case SYSPROP_DISPLAY_SAFE_INSET_RIGHT:
 	case SYSPROP_DISPLAY_SAFE_INSET_TOP:
@@ -280,8 +285,11 @@ bool System_GetPropertyBool(SystemProperty prop) {
 void System_Notify(SystemNotification notification) {
 	switch (notification) {
 	case SystemNotification::BOOT_DONE:
-		g_symbolMap->SortSymbols();
-		g_mainWindow->Notify(MainWindowMsg::BOOT_DONE);
+		// Reader fork: a game named on the command line boots before either exists.
+		if (g_symbolMap)
+			g_symbolMap->SortSymbols();
+		if (g_mainWindow)
+			g_mainWindow->Notify(MainWindowMsg::BOOT_DONE);
 		break;
 	case SystemNotification::SYMBOL_MAP_UPDATED:
 		if (g_symbolMap)
@@ -389,7 +397,9 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 #ifdef _DEBUG
 		title += " (debug)";
 #endif
-		g_mainWindow->SetWindowTitleAsync(title);
+		// Reader fork: with Qt 6 a game can start before the window is finished being made.
+		if (g_mainWindow)
+			g_mainWindow->SetWindowTitleAsync(title);
 		return true;
 	}
 	case SystemRequestType::INPUT_TEXT_MODAL:
@@ -519,9 +529,12 @@ void MainUI::EmuThreadJoin() {
 }
 
 MainUI::MainUI(QWidget *parent)
-	: QGLWidget(parent) {
+	: QOpenGLWidget(parent) {
 	emuThreadState = (int)EmuThreadState::DISABLED;
 	setAttribute(Qt::WA_AcceptTouchEvents);
+	// Reader fork: the pointer's moves are wanted without a button held too. Qt only reports
+	// those to a widget that asks; without this, pointing at a word looked nothing up.
+	setMouseTracking(true);
 #if QT_VERSION < QT_VERSION_CHECK(5, 0, 0)
 	setAttribute(Qt::WA_LockLandscapeOrientation);
 #endif
@@ -561,51 +574,68 @@ QString MainUI::InputBoxGetQString(QString title, QString defaultValue) {
 }
 
 void MainUI::resizeGL(int w, int h) {
+	// Reader fork: the picture is as many real pixels as the widget has (Qt 6 gives its own
+	// scaled ones here).
+	w = (int)(width() * devicePixelRatioF());
+	h = (int)(height() * devicePixelRatioF());
+	// The size the window is given at the next start (it is resizable by its edges).
+	if (g_mainWindow && !g_mainWindow->isFullScreen() && !g_mainWindow->isMaximized() && width() >= 240 && height() >= 136) {
+		g_Config.iWindowWidth = width();
+		g_Config.iWindowHeight = height();
+	}
 	if (Native_UpdateScreenScale(w, h, UIScaleFactorToMultiplier(g_Config.iUIScaleFactor))) {
 		System_PostUIMessage(UIMessage::GPU_RENDER_RESIZED);
 	}
-	xscale = w / this->width();
-	yscale = h / this->height();
+	xscale = devicePixelRatioF();
+	yscale = devicePixelRatioF();
 
 	PSP_CoreParameter().pixelWidth = g_display.pixel_xres;
 	PSP_CoreParameter().pixelHeight = g_display.pixel_yres;
 }
 
 void MainUI::timerEvent(QTimerEvent *) {
-	updateGL();
+#ifdef SDL
+	// Reader fork: controllers are looked at here, between Qt's events, and not in the middle
+	// of drawing as before. On Windows SDL's pump ran the whole message loop of this thread
+	// (main() switches that off as well), so that Qt resized and repainted the window from
+	// inside paintGL and the drawing went on with objects that were gone: resizing the
+	// window hung and crashed the program.
+	SDL_PumpEvents();
+#endif
+	update();
 	emit newFrame();
 }
 
 void MainUI::changeEvent(QEvent *e) {
-	QGLWidget::changeEvent(e);
+	QOpenGLWidget::changeEvent(e);
 	if (e->type() == QEvent::WindowStateChange)
 		Native_NotifyWindowHidden(isMinimized());
 }
 
 bool MainUI::event(QEvent *e) {
 	TouchInput input;
-	QList<QTouchEvent::TouchPoint> touchPoints;
+	QList<QEventPoint> touchPoints;
 
 	switch (e->type()) {
 	case QEvent::TouchBegin:
 	case QEvent::TouchUpdate:
 	case QEvent::TouchEnd:
-		touchPoints = static_cast<QTouchEvent *>(e)->touchPoints();
-		foreach (const QTouchEvent::TouchPoint &touchPoint, touchPoints) {
+		touchPoints = static_cast<QTouchEvent *>(e)->points();
+		for (const QEventPoint &touchPoint : touchPoints) {
 			switch (touchPoint.state()) {
-			case Qt::TouchPointStationary:
+			case QEventPoint::Stationary:
 				break;
-			case Qt::TouchPointPressed:
-			case Qt::TouchPointReleased:
-				input.x = touchPoint.pos().x() * g_display.dpi_scale_x * xscale;
-				input.y = touchPoint.pos().y() * g_display.dpi_scale_y * yscale;
-				input.flags = (touchPoint.state() == Qt::TouchPointPressed) ? TouchInputFlags::DOWN : TouchInputFlags::UP;
+			case QEventPoint::Pressed:
+			case QEventPoint::Released:
+				input.x = touchPoint.position().x() * g_display.dpi_scale_x * xscale;
+				input.y = touchPoint.position().y() * g_display.dpi_scale_y * yscale;
+				input.flags = (touchPoint.state() == QEventPoint::Pressed) ? TouchInputFlags::DOWN : TouchInputFlags::UP;
 				input.id = touchPoint.id();
 				NativeTouch(input);
 				break;
-			case Qt::TouchPointMoved:
-				input.x = touchPoint.pos().x() * g_display.dpi_scale_x * xscale;
-				input.y = touchPoint.pos().y() * g_display.dpi_scale_y * yscale;
+			case QEventPoint::Updated:
+				input.x = touchPoint.position().x() * g_display.dpi_scale_x * xscale;
+				input.y = touchPoint.position().y() * g_display.dpi_scale_y * yscale;
 				input.flags = TouchInputFlags::MOVE;
 				input.id = touchPoint.id();
 				NativeTouch(input);
@@ -621,12 +651,21 @@ bool MainUI::event(QEvent *e) {
 		break;
 	case QEvent::MouseButtonPress:
 	case QEvent::MouseButtonRelease:
+		// Reader fork: a click on the game's own text is the reader's.
+		if (e->type() == QEvent::MouseButtonPress
+				? ReaderUi::PointerPress(((QMouseEvent*)e)->position(), ((QMouseEvent*)e)->button() == Qt::LeftButton)
+				: (((QMouseEvent*)e)->button() == Qt::LeftButton && ReaderUi::PointerRelease(((QMouseEvent*)e)->position()))) {
+			break;
+		}
 		switch(((QMouseEvent*)e)->button()) {
 		case Qt::LeftButton:
 			input.x = ((QMouseEvent*)e)->pos().x() * g_display.dpi_scale_x * xscale;
 			input.y = ((QMouseEvent*)e)->pos().y() * g_display.dpi_scale_y * yscale;
 			input.flags = ((e->type() == QEvent::MouseButtonPress) ? TouchInputFlags::DOWN : TouchInputFlags::UP) | TouchInputFlags::MOUSE;
 			input.id = 0;
+			// Reader fork: which button it is. The emulator's screens take a mouse's touch
+			// only from the left one, and without this took none.
+			input.buttons = 1;
 			NativeTouch(input);
 			break;
 		case Qt::RightButton:
@@ -646,14 +685,20 @@ bool MainUI::event(QEvent *e) {
 		}
 		break;
 	case QEvent::MouseMove:
+		// Reader fork: the reader follows the pointer, and keeps what it took with a press.
+		if (ReaderUi::PointerMove(((QMouseEvent*)e)->position())) {
+			break;
+		}
 		input.x = ((QMouseEvent*)e)->pos().x() * g_display.dpi_scale_x * xscale;
 		input.y = ((QMouseEvent*)e)->pos().y() * g_display.dpi_scale_y * yscale;
 		input.flags = TouchInputFlags::MOVE | TouchInputFlags::MOUSE;
 		input.id = 0;
+		// Reader fork: as above, for a drag (a list's scrolling).
+		input.buttons = (((QMouseEvent*)e)->buttons() & Qt::LeftButton) ? 1 : 0;
 		NativeTouch(input);
 		break;
 	case QEvent::Wheel:
-		NativeKey(KeyInput(DEVICE_ID_MOUSE, ((QWheelEvent*)e)->delta()<0 ? NKCODE_EXT_MOUSEWHEEL_DOWN : NKCODE_EXT_MOUSEWHEEL_UP, KeyInputFlags::DOWN));
+		NativeKey(KeyInput(DEVICE_ID_MOUSE, ((QWheelEvent*)e)->angleDelta().y()<0 ? NKCODE_EXT_MOUSEWHEEL_DOWN : NKCODE_EXT_MOUSEWHEEL_UP, KeyInputFlags::DOWN));
 		break;
 	case QEvent::KeyPress:
 		{
@@ -705,7 +750,7 @@ void MainUI::initializeGL() {
 		g_Config.iGPUBackend = (int)GPUBackend::OPENGL;
 	}
 
-	bool useCoreContext = format().profile() == QGLFormat::CoreProfile;
+	bool useCoreContext = format().profile() == QSurfaceFormat::CoreProfile;
 
 	SetGLCoreContext(useCoreContext);
 
@@ -733,10 +778,11 @@ void MainUI::initializeGL() {
 	graphicsContext->ThreadStart();
 }
 
+// Reader fork: a QOpenGLWidget draws into a framebuffer of its own, not into number 0.
+extern GLuint g_defaultFBO;
+
 void MainUI::paintGL() {
-#ifdef SDL
-	SDL_PumpEvents();
-#endif
+	g_defaultFBO = defaultFramebufferObject();
 	updateAccelerometer();
 	if (emuThreadState == (int)EmuThreadState::DISABLED) {
 		NativeFrame(graphicsContext);
@@ -744,6 +790,8 @@ void MainUI::paintGL() {
 		graphicsContext->ThreadFrame(true);
 		// Do the rest in EmuThreadFunc
 	}
+	// Reader fork: a picture of what was drawn, when the development channel asked for one.
+	ReaderUi::SurfaceDrawn(defaultFramebufferObject(), width() * devicePixelRatioF(), height() * devicePixelRatioF());
 }
 
 void MainUI::updateAccelerometer() {
@@ -774,14 +822,11 @@ MainAudio::~MainAudio() {
 void MainAudio::run() {
 	QAudioFormat fmt;
 	fmt.setSampleRate(AUDIO_FREQ);
-	fmt.setCodec("audio/pcm");
 	fmt.setChannelCount(AUDIO_CHANNELS);
-	fmt.setSampleSize(AUDIO_SAMPLESIZE);
-	fmt.setByteOrder(QAudioFormat::LittleEndian);
-	fmt.setSampleType(QAudioFormat::SignedInt);
+	fmt.setSampleFormat(QAudioFormat::Int16);
 	mixlen = sizeof(short)*AUDIO_BUFFERS*AUDIO_CHANNELS*AUDIO_SAMPLES;
 	mixbuf = (char*)malloc(mixlen);
-	output = new QAudioOutput(fmt);
+	output = new QAudioSink(fmt);
 	output->setBufferSize(mixlen);
 	feed = output->start();
 	if (feed != nullptr) {
@@ -802,12 +847,17 @@ void MainAudio::timerEvent(QTimerEvent *) {
 #endif
 
 
+// Reader fork: no camera in the Qt 6 build.
 void QTCamera::startCamera(int width, int height) {
+#if !defined(READER_QT_NO_CAMERA)
 	__qt_startCapture(width, height);
+#endif
 }
 
 void QTCamera::stopCamera() {
+#if !defined(READER_QT_NO_CAMERA)
 	__qt_stopCapture();
+#endif
 }
 
 #ifndef SDL
@@ -815,6 +865,11 @@ Q_DECL_EXPORT
 #endif
 int main(int argc, char *argv[])
 {
+#ifdef SDL
+	// Reader fork: the windows are Qt's and so is their message queue. Without this, SDL's
+	// event pump on Windows takes and dispatches every message of the thread it runs on.
+	SDL_SetHint(SDL_HINT_WINDOWS_ENABLE_MESSAGELOOP, "0");
+#endif
 	TimeInit();
 
 	g_logManager.EnableOutput(LogOutput::Stdio);
@@ -827,22 +882,24 @@ int main(int argc, char *argv[])
 	}
 
 	// Ignore sigpipe.
+#ifndef _WIN32  // Reader fork: Windows has no such signal
 	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
 		perror("Unable to ignore SIGPIPE");
 	}
+#endif
 
 	PROFILE_INIT();
 	glslang::InitializeProcess();
-#if defined(Q_OS_LINUX)
-	QApplication::setAttribute(Qt::AA_X11InitThreads, true);
-#endif
 
 	// Qt would otherwise default to a 3.0 compatibility profile
 	// except on Nvidia, where Nvidia gives us the highest supported anyway
-	QGLFormat format;
+	QSurfaceFormat format;
 	format.setVersion(4, 6);
-	format.setProfile(QGLFormat::CoreProfile);
-	QGLFormat::setDefaultFormat(format);
+	format.setProfile(QSurfaceFormat::CoreProfile);
+	format.setDepthBufferSize(24);
+	format.setStencilBufferSize(8);
+	format.setSwapInterval(0);
+	QSurfaceFormat::setDefaultFormat(format);
 
 	QApplication a(argc, argv);
 	QScreen* screen = a.primaryScreen();
@@ -852,8 +909,9 @@ int main(int argc, char *argv[])
 		res.transpose();
 
 	// We assume physicalDotsPerInchY is the same as PerInchX.
-	float dpi_scale_x = screen->logicalDotsPerInchX() / screen->physicalDotsPerInchX();
-	float dpi_scale_y = screen->logicalDotsPerInchY() / screen->physicalDotsPerInchY();
+	// Reader fork: see SYSPROP_DISPLAY_DPI.
+	float dpi_scale_x = 1.0f / screen->devicePixelRatio();
+	float dpi_scale_y = dpi_scale_x;
 	g_display.Recalculate(res.width(), res.height(), dpi_scale_x, dpi_scale_y, UIScaleFactorToMultiplier(g_Config.iUIScaleFactor));
 
 	refreshRate = screen->refreshRate();
@@ -866,11 +924,40 @@ int main(int argc, char *argv[])
 	std::string external_dir = ".";
 #if QT_VERSION > QT_VERSION_CHECK(5, 0, 0)
 	savegame_dir = QStandardPaths::writableLocation(QStandardPaths::HomeLocation).toStdString();
-	external_dir = QStandardPaths::writableLocation(QStandardPaths::DataLocation).toStdString();
+	external_dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation).toStdString();
 #endif
 	savegame_dir += "/";
 	external_dir += "/";
 
+#ifdef _WIN32
+	// Reader fork: on Windows the shared start-up code leaves where things are kept to the
+	// frontend (the emulator's own Windows frontend does it in its main). This app keeps
+	// its PSP data, its settings and the reader's files in a folder of its own, so that it
+	// runs beside a PPSSPP on the same computer and neither touches the other's data:
+	// %APPDATA%\ppsspp-reader, or "memstick" beside the program when a file portable.txt
+	// lies there.
+	{
+		const Path exeDir = File::GetExeDirectory();
+		// The program's own assets, before the settings are read (which asks for the
+		// language files) and wherever the program was started from: the shared code
+		// only looks in "assets" below the folder it is started in.
+		g_VFS.Register("", new DirectoryReader(exeDir / "assets"));
+		g_Config.flash0Directory = exeDir / "assets/flash0";
+		if (File::Exists(exeDir / "portable.txt")) {
+			g_Config.memStickDirectory = exeDir / "memstick";
+		} else {
+			QString appData = qEnvironmentVariable("APPDATA");
+			if (appData.isEmpty())
+				appData = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation);
+			g_Config.memStickDirectory = Path((appData + QStringLiteral("/ppsspp-reader")).toStdString());
+		}
+		g_Config.internalDataDirectory = g_Config.memStickDirectory;
+		File::CreateFullPath(g_Config.memStickDirectory);
+		CreateSysDirectories();
+		g_Config.SetSearchPath(GetSysDirectory(DIRECTORY_SYSTEM));
+		g_Config.Load();
+	}
+#endif
 	NativeInit(argc, (const char **)argv, savegame_dir.c_str(), external_dir.c_str(), nullptr);
 
 	g_mainWindow = new MainWindow(nullptr, g_Config.bFullScreen);

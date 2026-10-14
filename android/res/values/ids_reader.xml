@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="reader_fragment_container" type="id" />
+    <item name="reader_pad_hint" type="id" />
+    <item name="reader_anki_target_ankidroid" type="id" />
+    <item name="reader_anki_target_ankiconnect" type="id" />
+    <item name="reader_anki_target_none" type="id" />
+</resources>

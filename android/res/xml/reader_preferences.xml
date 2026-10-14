@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The reader's first page: statistics and the supported games, then one entry per page of
+     settings (res/xml/reader_prefs_*.xml). -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <Preference
+        app:key="reader_open_stats"
+        app:title="@string/reader_statistics"
+        app:summary="@string/reader_statistics_summary"
+        app:iconSpaceReserved="false" />
+    <Preference
+        app:key="reader_open_games"
+        app:title="@string/reader_games"
+        app:summary="@string/reader_games_summary"
+        app:iconSpaceReserved="false" />
+
+    <PreferenceCategory app:title="@string/reader_pref_category_settings" app:iconSpaceReserved="false">
+        <Preference
+            app:key="reader_section_lookup"
+            app:title="@string/reader_pref_category_screen_text"
+            app:summary="@string/reader_section_lookup_summary"
+            app:iconSpaceReserved="false" />
+        <Preference
+            app:key="reader_section_cursor"
+            app:title="@string/reader_pref_category_cursor"
+            app:summary="@string/reader_section_cursor_summary"
+            app:iconSpaceReserved="false" />
+        <Preference
+            app:key="reader_section_panel"
+            app:title="@string/reader_pref_category_panel"
+            app:summary="@string/reader_section_panel_summary"
+            app:iconSpaceReserved="false" />
+        <Preference
+            app:key="reader_open_dictionaries"
+            app:title="@string/reader_dictionaries"
+            app:summary="@string/reader_section_dictionaries_summary"
+            app:iconSpaceReserved="false" />
+        <Preference
+            app:key="reader_section_cards"
+            app:title="@string/reader_pref_category_mining"
+            app:summary="@string/reader_section_cards_summary"
+            app:iconSpaceReserved="false" />
+        <Preference
+            app:key="reader_section_stats"
+            app:title="@string/reader_pref_category_stats"
+            app:summary="@string/reader_section_stats_summary"
+            app:iconSpaceReserved="false" />
+        <Preference
+            app:key="reader_section_output"
+            app:title="@string/reader_pref_category_output"
+            app:summary="@string/reader_section_output_summary"
+            app:iconSpaceReserved="false" />
+        <!-- The CRT picture: a page of its own, built from the native side's table
+             (reader/ui/CrtSettings.kt). -->
+        <Preference
+            app:key="reader_open_crt"
+            app:title="CRT picture"
+            app:summary="Scan lines, phosphor and curved glass: the game as on an old television"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+</PreferenceScreen>

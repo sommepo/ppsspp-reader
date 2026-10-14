@@ -784,6 +784,9 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 			// render loop thread will be started once we get a surface.
 		}
 
+		// Reader fork: the reading layer lies over the surface.
+		org.ppsspp.ppsspp.reader.ReaderGlue.attach(this, javaGL ? mGLSurfaceView : mSurfaceView);
+
 		if (shortcutParam != null && !shortcutParam.isEmpty()) {
 			Log.i(TAG, "Got shortcutParam in onCreate on secondary run: " + shortcutParam);
 			// Make sure we only send it once.
@@ -995,6 +998,7 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 	protected void onDestroy() {
 		super.onDestroy();
 		lifeCycle.onDestroy();
+		org.ppsspp.ppsspp.reader.ReaderGlue.onDestroy(this);  // Reader fork
 
 		if (javaGL) {
 			nativeRenderer = null;
@@ -1053,6 +1057,7 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 	protected void onPause() {
 		super.onPause();
 		lifeCycle.onPause();
+		org.ppsspp.ppsspp.reader.ReaderGlue.onPause();  // Reader fork
 
 		InputManager inputManager = (InputManager)getSystemService(Context.INPUT_SERVICE);
 		inputManager.unregisterInputDeviceListener(inputDeviceListener);
@@ -1080,6 +1085,7 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 	protected void onResume() {
 		super.onResume();
 		lifeCycle.onResume();
+		org.ppsspp.ppsspp.reader.ReaderGlue.onResume();  // Reader fork
 
 		updateSustainedPerformanceMode();
 		sizeManager.onResume();
@@ -1195,6 +1201,10 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 	// distinguish devices.
 	@Override
 	public boolean dispatchKeyEvent(KeyEvent event) {
+		// Reader fork: the reader's own buttons (its cursor, its statistics) do not reach the game.
+		if (org.ppsspp.ppsspp.reader.ReaderGlue.onKey(event)) {
+			return true;
+		}
 		// Log.d(TAG, "key event source: " + event.getSource());
 		if (NativeApp.isFromSource(event, InputDevice.SOURCE_MOUSE)) {
 			Log.i(TAG, "Forwarding key event from mouse: " + event.getKeyCode() + " useModernB2: " + useModernMouseEventsB2);
@@ -1283,6 +1293,10 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 
 	@Override
 	public boolean onGenericMotionEvent(MotionEvent event) {
+		// Reader fork: while the reader's cursor has the sticks, the game does not.
+		if (org.ppsspp.ppsspp.reader.ReaderGlue.onMotion(event)) {
+			return true;
+		}
 		if (InputDeviceState.inputSourceIsJoystick(event.getSource())) {
 			InputDeviceState state = getInputDeviceState(event);
 			if (state == null) {

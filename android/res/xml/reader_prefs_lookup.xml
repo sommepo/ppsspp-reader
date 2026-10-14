@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reader settings, the page "Looking words up": tapping the game's text and the dictionary popup. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <SwitchPreferenceCompat
+        app:key="reader_screen_text"
+        app:defaultValue="true"
+        app:title="@string/reader_pref_screen_text"
+        app:summary="@string/reader_pref_screen_text_summary"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_popup_scale"
+        app:defaultValue="100"
+        app:min="60"
+        android:max="200"
+        app:seekBarIncrement="5"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_popup_scale"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_popup_autohide"
+        app:defaultValue="15"
+        app:min="0"
+        android:max="120"
+        app:seekBarIncrement="5"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_popup_autohide"
+        app:summary="@string/reader_pref_popup_autohide_summary"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_popup_height"
+        app:defaultValue="27"
+        app:min="10"
+        android:max="80"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_popup_height"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_screen_text_outline"
+        app:defaultValue="false"
+        app:dependency="reader_screen_text"
+        app:title="@string/reader_pref_screen_text_outline"
+        app:iconSpaceReserved="false" />
+</PreferenceScreen>

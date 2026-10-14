@@ -50,6 +50,7 @@
 #include "Core/MIPS/MIPSVFPUUtils.h"
 #include "Core/Debugger/SymbolMap.h"
 #include "Core/System.h"
+#include "reader/core/emulator.h"  // Reader fork
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/Plugins.h"
 #include "Core/HLE/ReplaceTables.h"
@@ -608,6 +609,9 @@ bool PSP_InitStart(const CoreParameter &coreParam) {
 
 	IncrementDebugCounter(DebugCounter::GAME_BOOT);
 
+	// Reader fork: a new game, forget the previous one's text profile.
+	Reader::Emu::OnGameLoading();
+
 	g_bootState = BootState::Booting;
 
 	GraphicsContext *temp = g_CoreParameter.graphicsContext;
@@ -756,6 +760,9 @@ void PSP_Shutdown(bool success) {
 	_assert_(g_bootState != BootState::Failed);
 
 	Core_Stop();
+
+	// Reader fork: the game's memory is about to go.
+	Reader::Emu::OnShutdown();
 
 	if (g_Config.bFuncHashMap) {
 		MIPSAnalyst::StoreHashMap();

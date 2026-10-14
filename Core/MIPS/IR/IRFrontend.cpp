@@ -19,6 +19,7 @@
 #include "Common/Serialize/Serializer.h"
 #include "Common/Serialize/SerializeFuncs.h"
 #include "Core/Debugger/Breakpoints.h"
+#include "reader/core/emulator.h"  // Reader fork
 #include "Core/Debugger/SymbolMap.h"
 #include "Core/Reporting.h"
 #include "Core/HLE/ReplaceTables.h"
@@ -355,7 +356,8 @@ void IRFrontend::Comp_RunBlock(MIPSOpcode op) {
 }
 
 void IRFrontend::CheckBreakpoint(u32 addr) {
-	if (g_breakpoints.IsAddressBreakPoint(addr)) {
+	// Reader fork: an address a text profile hooks is compiled like a breakpoint.
+	if (g_breakpoints.IsAddressBreakPoint(addr) || Reader::Emu::IsHooked(addr)) {
 		FlushAll();
 
 		// Can't skip this even at the start of a block, might impact block linking.

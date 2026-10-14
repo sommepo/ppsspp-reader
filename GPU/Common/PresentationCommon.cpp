@@ -35,6 +35,7 @@
 #include "Core/HW/Display.h"
 #include "GPU/Common/PostShader.h"
 #include "GPU/Common/PresentationCommon.h"
+#include "reader/core/crt.h"  // Reader fork
 #include "GPU/GPUState.h"
 #include "Common/GPU/ShaderTranslation.h"
 
@@ -252,6 +253,15 @@ void PresentationCommon::CalculatePostShaderUniforms(int bufferWidth, int buffer
 	uniforms->setting[1] = GetShaderSettingValue(shaderInfo, 1, "SettingCurrentValue2");
 	uniforms->setting[2] = GetShaderSettingValue(shaderInfo, 2, "SettingCurrentValue3");
 	uniforms->setting[3] = GetShaderSettingValue(shaderInfo, 3, "SettingCurrentValue4");
+
+	// Reader fork: what the CRT picture's shader reads. Its pass is the chain's last and
+	// draws the picture's whole buffer onto its place on the screen.
+	Reader::Crt::Picture picture;
+	picture.source_width = (float)bufferWidth;
+	picture.source_height = (float)bufferHeight;
+	picture.output_width = (float)targetWidth;
+	picture.output_height = (float)targetHeight;
+	Reader::Crt::Pack(picture, &uniforms->crt[0][0]);
 }
 
 static std::string ReadShaderSrc(const Path &filename) {
@@ -287,6 +297,20 @@ bool PresentationCommon::UpdatePostShader(const DisplayLayoutConfig &config) {
 	if (!g_Config.vPostShaderNames.empty()) {
 		ReloadAllPostShaderInfo(draw_);
 		shaderInfo = GetFullPostShadersChain(g_Config.vPostShaderNames);
+	}
+
+	// Reader fork: the CRT picture is one more pass, the chain's last, while it is on
+	// (reader/core/crt.h; the handheld builds get the shader's lighter make).
+	if (Reader::Crt::Enabled()) {
+		Reader::Crt::SetNativeLines(272);
+		ReloadAllPostShaderInfo(draw_);
+#if PPSSPP_PLATFORM(ANDROID) || PPSSPP_PLATFORM(IOS)
+		const ShaderInfo *readerCrt = GetPostShaderInfo("ReaderCRTMobile");
+#else
+		const ShaderInfo *readerCrt = GetPostShaderInfo("ReaderCRT");
+#endif
+		if (readerCrt)
+			shaderInfo.push_back(readerCrt);
 	}
 
 	DestroyPostShader();
@@ -371,6 +395,15 @@ bool PresentationCommon::CompilePostShader(const ShaderInfo *shaderInfo, Draw::P
 		{ "u_setting", 5, 5, UniformType::FLOAT4, offsetof(PostShaderUniforms, setting) },
 		{ "u_video", 6, 6, UniformType::FLOAT1, offsetof(PostShaderUniforms, video) },
 		{ "u_vr", 7, 7, UniformType::FLOAT1, offsetof(PostShaderUniforms, vr) },
+		// Reader fork
+		{ "u_crt0", 8, 8, UniformType::FLOAT4, offsetof(PostShaderUniforms, crt) },
+		{ "u_crt1", 9, 9, UniformType::FLOAT4, offsetof(PostShaderUniforms, crt) + 16 },
+		{ "u_crt2", 10, 10, UniformType::FLOAT4, offsetof(PostShaderUniforms, crt) + 32 },
+		{ "u_crt3", 11, 11, UniformType::FLOAT4, offsetof(PostShaderUniforms, crt) + 48 },
+		{ "u_crt4", 12, 12, UniformType::FLOAT4, offsetof(PostShaderUniforms, crt) + 64 },
+		{ "u_crt5", 13, 13, UniformType::FLOAT4, offsetof(PostShaderUniforms, crt) + 80 },
+		{ "u_crt6", 14, 14, UniformType::FLOAT4, offsetof(PostShaderUniforms, crt) + 96 },
+		{ "u_crt7", 15, 15, UniformType::FLOAT4, offsetof(PostShaderUniforms, crt) + 112 },
 	} };
 
 	Draw::Pipeline *pipeline = CreatePipeline({ vs, fs }, true, &postShaderDesc);

@@ -34,6 +34,7 @@
 #include "Core/Debugger/MemBlockInfo.h"
 #include "GPU/Common/DrawEngineCommon.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
+#include "reader/core/crt.h"  // Reader fork
 #include "GPU/Common/PresentationCommon.h"
 #include "GPU/Common/TextureCacheCommon.h"
 #include "GPU/Common/ReinterpretFramebuffer.h"
@@ -111,6 +112,12 @@ bool FramebufferManagerCommon::UpdateRenderSize(int msaaLevel) {
 }
 
 void FramebufferManagerCommon::CheckPostShaders(const DisplayLayoutConfig &config) {
+	// Reader fork: the CRT picture's pass joins and leaves the chain as it is switched
+	static bool readerCrt = false;
+	if (readerCrt != Reader::Crt::Enabled()) {
+		readerCrt = !readerCrt;
+		updatePostShaders_ = true;
+	}
 	if (updatePostShaders_) {
 		presentation_->UpdatePostShader(config);
 		updatePostShaders_ = false;

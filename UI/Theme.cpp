@@ -32,6 +32,7 @@
 #include "Common/UI/View.h"
 #include "Common/UI/Context.h"
 #include "Core/System.h"
+#include "reader/ui/xmb.h"  // Reader fork
 
 struct ThemeInfo {
 	std::string name;
@@ -242,6 +243,10 @@ void UpdateTheme() {
 	ui_theme.tooltipStyle = MakeStyle(themeInfo.uTooltipStyleFg, themeInfo.uTooltipStyleBg);
 
 	ui_theme.backgroundColor = themeInfo.uBackgroundColor;
+	// Reader fork: the PSP look's ground goes with the month, here as on its main screen.
+	if (g_Config.sThemeName == "PSP") {
+		ui_theme.backgroundColor = ReaderXmb::GroundColor();
+	}
 	ui_theme.scrollbarColor = themeInfo.uScrollbarColor;
 
 	ui_theme.popupSliderColor = themeInfo.uPopupSliderColor;

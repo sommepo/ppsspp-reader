@@ -41,6 +41,9 @@
 #include "UI/BackgroundAudio.h"
 #include "UI/EmuScreen.h"
 #include "UI/MainScreen.h"
+#include "reader/core/emulator.h"  // Reader fork
+#include "reader/ui/save_sync_screen.h"  // Reader fork
+#include "reader/ui/xmb.h"  // Reader fork
 #include "UI/GameScreen.h"
 #include "UI/GameInfoCache.h"
 #include "UI/GameSettingsScreen.h"
@@ -283,6 +286,21 @@ void MainScreen::CreateMainButtons(UI::ViewGroup *parent, bool portrait) {
 		parent->Add(portrait ? new Choice(ImageID("I_FOLDER_OPEN"), portrait ? new LinearLayoutParams() : nullptr) : new Choice(mm->T("Load", "Load...")))->OnClick.Handle(this, &MainScreen::OnLoadFile);
 	}
 	parent->Add(portrait ? new Choice(ImageID("I_GEAR"), portrait ? new LinearLayoutParams() : nullptr) : new Choice(mm->T("Game Settings", "Settings")))->OnClick.Handle(this, &MainScreen::OnGameSettings);
+	// Reader fork: the reader's own page (statistics, supported games, dictionaries, Anki, settings).
+	parent->Add(portrait ? new Choice(ImageID("I_FILE"), portrait ? new LinearLayoutParams() : nullptr) : new Choice("Reader"))->OnClick.Add([](UI::EventParams &) {
+		Reader::Emu::OpenMenu("settings");
+	});
+	// Reader fork: save sync's page.
+	parent->Add(portrait ? new Choice(ImageID("I_FOLDER_UPLOAD"), portrait ? new LinearLayoutParams() : nullptr) : new Choice("Save sync"))->OnClick.Add([this](UI::EventParams &) {
+		screenManager()->push(new ReaderSaveSync::Screen());
+	});
+	if (!portrait) {
+		// Reader fork: back to the reader's own main screen.
+		parent->Add(new Choice("PSP menu"))->OnClick.Add([this](UI::EventParams &) {
+			ReaderXmb::SetEnabled(true);
+			RecreateViews();
+		});
+	}
 	parent->Add(portrait ? new Choice(ImageID("I_INFO"), portrait ? new LinearLayoutParams() : nullptr) : new Choice(mm->T("About PPSSPP")))->OnClick.Handle(this, &MainScreen::OnCredits);
 
 	if (!portrait) {
@@ -337,6 +355,39 @@ void MainScreen::CreateViews() {
 	const bool vertical = GetDeviceOrientation() == DeviceOrientation::Portrait;
 
 	auto mm = GetI18NCategory(I18NCat::MAINMENU);
+
+	// Reader fork: the reader's main screen in place of this one, unless the user chose this one.
+	if (ReaderXmb::Enabled() && !vertical) {
+		tabHolder_ = nullptr;
+		gameBrowsers_.clear();
+		ReaderXmb::Host host;
+		host.launch = [this](const Path &path) { LaunchFile(screenManager(), this, path); };
+		host.settings = [this] { screenManager()->push(new GameSettingsScreen(Path())); };
+		host.save_sync = [this] { screenManager()->push(new ReaderSaveSync::Screen()); };
+		host.classic = [this] {
+			ReaderXmb::SetEnabled(false);
+			RecreateViews();
+		};
+		host.folder = [this] {
+			if (!System_GetPropertyBool(SYSPROP_HAS_FOLDER_BROWSER)) {
+				ReaderXmb::SetEnabled(false);
+				RecreateViews();
+				return;
+			}
+			System_BrowseForFolder(GetRequesterToken(), "Games", Path(g_Config.currentDirectory), [this](const std::string &value, int) {
+				ReaderXmb::RememberFolder(value);
+				g_Config.currentDirectory = Path(value);
+				RecreateViews();
+			});
+		};
+		host.exit = [] {
+			g_Config.Save("MainScreen::OnExit");
+			UpdateUIState(UISTATE_EXIT);
+			System_ExitApp();
+		};
+		root_ = ReaderXmb::Build(host);
+		return;
+	}
 
 	tabHolder_ = new TabHolder(ORIENT_HORIZONTAL, 64, TabHolderFlags::Default, nullptr, nullptr, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT, 1.0f));
 	ViewGroup *leftColumn = tabHolder_;

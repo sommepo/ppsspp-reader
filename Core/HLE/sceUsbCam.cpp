@@ -336,8 +336,10 @@ std::vector<std::string> Camera::getDeviceList() {
 		return System_GetCameraDeviceList();
 #elif PPSSPP_PLATFORM(MAC)
 	return __mac_getDeviceList();
-	#elif defined(USING_QT_UI) // Qt:macOS / Qt:Linux
+	#elif defined(USING_QT_UI) && !defined(READER_QT_NO_CAMERA) // Qt:macOS / Qt:Linux (Reader fork: not with Qt 6)
 		return __qt_getDeviceList();
+	#elif defined(USING_QT_UI)
+		return std::vector<std::string>();
 	#elif PPSSPP_PLATFORM(LINUX) // SDL:Linux
 		return __v4l_getDeviceList();
 	#endif

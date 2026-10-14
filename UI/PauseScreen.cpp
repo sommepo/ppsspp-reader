@@ -57,6 +57,7 @@
 
 #include "UI/EmuScreen.h"
 #include "UI/PauseScreen.h"
+#include "reader/core/emulator.h"  // Reader fork
 #include "UI/GameSettingsScreen.h"
 #include "UI/ReportScreen.h"
 #include "UI/CwCheatScreen.h"
@@ -641,6 +642,12 @@ void GamePauseScreen::CreateViews() {
 		continueChoice->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
 		rightColumnItems->Add(new Spacer(20.0));
 	}
+
+	// Reader fork: what the reader offers for the running game (a card of the sentence, the
+	// backlog, statistics, dictionaries, Anki, its settings).
+	rightColumnItems->Add(new Choice("Reader", ImageID("I_FILE")))->OnClick.Add([](UI::EventParams &) {
+		Reader::Emu::OpenMenu("menu");
+	});
 
 	if (g_paramSFO.IsValid() && g_Config.HasGameConfig(g_paramSFO.GetDiscID())) {
 		rightColumnItems->Add(new Choice(pa->T("Game Settings"), ImageID("I_GEAR")))->OnClick.Handle(this, &GamePauseScreen::OnGameSettings);

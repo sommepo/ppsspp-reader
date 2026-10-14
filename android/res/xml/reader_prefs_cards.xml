@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reader settings, the page "Anki and cards": where cards go, and their picture and audio. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <Preference
+        app:key="reader_open_anki"
+        app:title="@string/reader_anki_setup"
+        app:iconSpaceReserved="false" />
+    <ListPreference
+        app:key="reader_card_audio"
+        app:defaultValue="ask"
+        app:entries="@array/reader_card_audio_entries"
+        app:entryValues="@array/reader_card_audio_values"
+        app:title="@string/reader_pref_card_audio"
+        app:useSimpleSummaryProvider="true"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_capture_audio"
+        app:defaultValue="true"
+        app:title="@string/reader_pref_capture_audio"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_audio_max_seconds"
+        app:defaultValue="20"
+        app:min="3"
+        android:max="60"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_audio_max"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_audio_lead_ms"
+        app:defaultValue="0"
+        app:min="0"
+        android:max="2000"
+        app:seekBarIncrement="50"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_audio_lead"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_screenshot_cache"
+        app:defaultValue="30"
+        app:min="0"
+        android:max="200"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_screenshot_cache"
+        app:summary="@string/reader_pref_screenshot_cache_summary"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_screenshot_width"
+        app:defaultValue="1280"
+        app:min="320"
+        android:max="1920"
+        app:seekBarIncrement="160"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_screenshot_width"
+        app:iconSpaceReserved="false" />
+</PreferenceScreen>

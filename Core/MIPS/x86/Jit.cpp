@@ -44,6 +44,7 @@
 #include "Jit.h"
 
 #include "Core/Debugger/Breakpoints.h"
+#include "reader/core/emulator.h"  // Reader fork
 
 namespace MIPSComp
 {
@@ -773,7 +774,8 @@ void Jit::WriteSyscallExit() {
 }
 
 bool Jit::CheckJitBreakpoint(u32 addr, int downcountOffset) {
-	if (g_breakpoints.IsAddressBreakPoint(addr)) {
+	// Reader fork: an address a text profile hooks is compiled like a breakpoint.
+	if (g_breakpoints.IsAddressBreakPoint(addr) || Reader::Emu::IsHooked(addr)) {
 		SaveFlags();
 		FlushAll();
 		MOV(32, MIPSSTATE_VAR(pc), Imm32(GetCompilerPC()));

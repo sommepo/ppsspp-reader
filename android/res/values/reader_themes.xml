@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Reader fork: the look of the reading layer's own screens and dialogs. -->
+    <style name="Theme.Reader" parent="Theme.Material3.DayNight.NoActionBar" />
+</resources>

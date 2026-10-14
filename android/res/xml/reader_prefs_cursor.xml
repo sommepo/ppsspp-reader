@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reader settings, the page "Cursor". -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <Preference
+        app:selectable="false"
+        app:persistent="false"
+        app:summary="@string/reader_cursor_about"
+        app:iconSpaceReserved="false" />
+    <ListPreference
+        app:key="reader_cursor_button"
+        app:defaultValue="104"
+        app:entries="@array/reader_cursor_button_entries"
+        app:entryValues="@array/reader_cursor_button_values"
+        app:title="@string/reader_pref_cursor_button"
+        app:useSimpleSummaryProvider="true"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_cursor_toggle"
+        app:defaultValue="false"
+        app:title="@string/reader_pref_cursor_toggle"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_cursor_frame"
+        app:defaultValue="true"
+        app:title="@string/reader_pref_cursor_frame"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_popup_hide_on_exit"
+        app:defaultValue="false"
+        app:title="@string/reader_pref_popup_hide_on_exit"
+        app:summary="@string/reader_pref_popup_hide_on_exit_summary"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_cursor_home"
+        app:defaultValue="true"
+        app:title="@string/reader_pref_cursor_home"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_second_screen"
+        app:defaultValue="true"
+        app:title="@string/reader_pref_second_screen"
+        app:summary="@string/reader_pref_second_screen_summary"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_cursor_speed"
+        app:defaultValue="100"
+        app:min="25"
+        android:max="300"
+        app:seekBarIncrement="5"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_cursor_speed"
+        app:iconSpaceReserved="false" />
+</PreferenceScreen>

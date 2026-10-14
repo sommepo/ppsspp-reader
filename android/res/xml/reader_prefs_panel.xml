@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reader settings, the page "Reader panel". -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <SwitchPreferenceCompat
+        app:key="reader_panel_enabled"
+        app:defaultValue="true"
+        app:title="@string/reader_pref_panel_enabled"
+        app:summary="@string/reader_pref_panel_enabled_summary"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_panel_auto_hide"
+        app:defaultValue="true"
+        app:dependency="reader_panel_enabled"
+        app:title="@string/reader_pref_panel_auto_hide"
+        app:iconSpaceReserved="false" />
+    <ListPreference
+        app:key="reader_panel_display"
+        app:defaultValue="auto"
+        app:entries="@array/reader_display_entries"
+        app:entryValues="@array/reader_display_values"
+        app:title="@string/reader_pref_panel_display"
+        app:useSimpleSummaryProvider="true"
+        app:iconSpaceReserved="false" />
+    <ListPreference
+        app:key="reader_panel_position"
+        app:defaultValue="bottom"
+        app:entries="@array/reader_position_entries"
+        app:entryValues="@array/reader_position_values"
+        app:title="@string/reader_pref_panel_position"
+        app:useSimpleSummaryProvider="true"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_font_size"
+        app:defaultValue="22"
+        app:min="12"
+        android:max="48"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_font_size"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_panel_height"
+        app:defaultValue="38"
+        app:min="15"
+        android:max="100"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_panel_height"
+        app:iconSpaceReserved="false" />
+    <SeekBarPreference
+        app:key="reader_panel_opacity"
+        app:defaultValue="85"
+        app:min="0"
+        android:max="100"
+        app:showSeekBarValue="true"
+        app:title="@string/reader_pref_panel_opacity"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_furigana"
+        app:defaultValue="true"
+        app:title="@string/reader_pref_furigana"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_show_choices"
+        app:defaultValue="true"
+        app:title="@string/reader_pref_show_choices"
+        app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_reread_colour"
+        app:defaultValue="true"
+        app:title="@string/reader_pref_reread_colour"
+        app:iconSpaceReserved="false" />
+    <ListPreference
+        app:key="reader_advance_button"
+        app:defaultValue="13"
+        app:entries="@array/reader_advance_button_entries"
+        app:entryValues="@array/reader_advance_button_values"
+        app:title="@string/reader_pref_advance_button"
+        app:useSimpleSummaryProvider="true"
+        app:iconSpaceReserved="false" />
+</PreferenceScreen>

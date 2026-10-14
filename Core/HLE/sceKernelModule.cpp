@@ -59,6 +59,7 @@
 #include "Core/Debugger/SymbolMap.h"
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceKernelModule.h"
+#include "reader/core/emulator.h"  // Reader fork
 #include "Core/HLE/sceKernelThread.h"
 #include "Core/HLE/sceKernelMemory.h"
 #include "Core/HLE/sceMpeg.h"
@@ -1598,6 +1599,11 @@ static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 load
 		module->modulePtr.NotifyWrite("KernelModule");
 	}
 
+	// Reader fork: text profiles go by where a game's executables are and which build they are.
+	if (!module->isFake) {
+		Reader::Emu::OnModuleLoaded(module->nm.name, module->memoryBlockAddr, module->memoryBlockSize, module->crc);
+	}
+
 	error = 0;
 	return module;
 }
@@ -1763,6 +1769,9 @@ bool __KernelLoadExec(const char *filename, u32 paramPtr, std::string *error_str
 
 	__KernelLoadReset();
 
+	// Reader fork: the program that is loaded next is the one text profiles are for.
+	Reader::Emu::OnExecLoading();
+
 	std::vector<uint8_t> fileData;
 	if (pspFileSystem.ReadEntireFile(filename, fileData) < 0) {
 		ERROR_LOG(Log::Loader, "Failed to load executable %s - file doesn't exist", filename);
@@ -1796,6 +1805,9 @@ bool __KernelLoadExec(const char *filename, u32 paramPtr, std::string *error_str
 	mipsr4k.pc = module->nm.entry_addr;
 
 	INFO_LOG(Log::Loader, "Module entry: %08x (%s %04x)", mipsr4k.pc, moduleName, moduleVersion);
+
+	// Reader fork: the game is in memory, its text profile can be loaded.
+	Reader::Emu::OnExecLoaded();
 
 	SceKernelSMOption option;
 	option.size = sizeof(SceKernelSMOption);

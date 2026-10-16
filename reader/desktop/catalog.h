@@ -23,6 +23,9 @@ struct ProfileInfo {
     /// for a game whose lines have no voices; empty when it says nothing. The user's own
     /// choice for the game goes before it.
     QString audio;
+    /// How the game is played by touch alone ("-- reader: touch <how>"): "game", it takes
+    /// touches itself; "press", the reader presses its buttons; empty, not played by touch.
+    QString touch;
 };
 
 /// Which games the reader can read, from the profiles themselves.

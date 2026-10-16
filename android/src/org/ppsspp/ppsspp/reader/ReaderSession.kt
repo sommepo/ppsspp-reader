@@ -66,6 +66,11 @@ object ReaderSession {
     }
 
     private const val DUPLICATE_WINDOW_MS = 1500L
+
+    /** How long a button is held for the game, and how long a step of picking an answer takes. */
+    private const val PRESS_MS = 80L
+    private const val PICK_STEP_MS = 220L
+    private const val MAX_PICK_PRESSES = 48
     private const val HEARTBEAT_MS = 1000L
     private const val FLUSH_INTERVAL_MS = 15_000L
 
@@ -313,21 +318,101 @@ object ReaderSession {
         worker?.execute { tracker?.onInteraction(now) }
     }
 
-    /** Presses and releases the configured advance button in the game. Main thread. */
-    fun pressAdvance() {
-        val button = settings?.advanceButton ?: ReaderInput.PSP_CIRCLE
+    /** Holds (true) or lets go of (false) one button of the console, by its number: the
+     *  buttons a game played by touch still needs (ui/TouchButtons). Main thread. */
+    fun holdButton(code: Int, down: Boolean) {
         try {
-            ReaderNative.pressButton(button, true)
-            main.postDelayed({
-                try {
-                    ReaderNative.pressButton(button, false)
-                } catch (_: UnsatisfiedLinkError) {
-                }
-            }, 80)
+            ReaderNative.pressButton(code, down)
         } catch (_: UnsatisfiedLinkError) {
             // No emulator behind this (off-device tests).
         }
+        if (down) noteInteraction()
+    }
+
+    /** Presses and releases the configured advance button in the game. Main thread. */
+    fun pressAdvance() {
+        press(settings?.advanceButton ?: ReaderInput.PSP_CIRCLE)
         noteInteraction()
+    }
+
+    /** Presses and releases one button of the PSP (a bit of its button word). */
+    private fun press(bit: Int) {
+        try {
+            ReaderNative.pressButton(bit, true)
+            main.postDelayed({
+                try {
+                    ReaderNative.pressButton(bit, false)
+                } catch (_: UnsatisfiedLinkError) {
+                }
+            }, PRESS_MS)
+        } catch (_: UnsatisfiedLinkError) {
+            // No emulator behind this (off-device tests).
+        }
+    }
+
+    private var picking: Runnable? = null
+
+    /**
+     * Picks answer [answer] (from 0) of the choice on screen as a player would with the
+     * controller: moves the game's cursor there with the d-pad, one press at a time while the
+     * profile reports where it is, then presses the advance button. False, and nothing pressed,
+     * when the profile does not say where the cursor is. Main thread.
+     */
+    fun pickAnswer(answer: Int): Boolean {
+        val first = try {
+            ReaderNative.answerCursor()
+        } catch (_: UnsatisfiedLinkError) {
+            null
+        } ?: return false
+        if (first.isEmpty()) return false
+        picking?.let { main.removeCallbacks(it) }
+        var presses = 0
+        var last = Int.MIN_VALUE
+        var stuck = 0
+        val step = object : Runnable {
+            override fun run() {
+                val cursor = try {
+                    ReaderNative.answerCursor()
+                } catch (_: UnsatisfiedLinkError) {
+                    null
+                }
+                if (cursor == null || presses >= MAX_PICK_PRESSES) {
+                    picking = null
+                    return
+                }
+                val at = cursor[0]
+                val sideways = cursor[1] == 1
+                if (at == answer) {
+                    picking = null
+                    pressAdvance()
+                    return
+                }
+                // A press that leaves the cursor where it was, twice: something else has the input (a
+                // game's lesson over its first choice wants the confirm button first). Confirm once.
+                stuck = if (at == last) stuck + 1 else 0
+                last = at
+                if (stuck >= 2) {
+                    stuck = 0
+                    last = Int.MIN_VALUE
+                    pressAdvance()
+                    presses++
+                    main.postDelayed(this, PICK_STEP_MS)
+                    return
+                }
+                press(
+                    when {
+                        at < answer -> if (sideways) ReaderInput.PSP_RIGHT else ReaderInput.PSP_DOWN
+                        else -> if (sideways) ReaderInput.PSP_LEFT else ReaderInput.PSP_UP
+                    }
+                )
+                presses++
+                main.postDelayed(this, PICK_STEP_MS)
+            }
+        }
+        picking = step
+        step.run()
+        noteInteraction()
+        return true
     }
 
     /** Forgets the tracker's open session after sessions were deleted or cleared. */

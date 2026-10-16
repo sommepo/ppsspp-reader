@@ -1,5 +1,6 @@
 -- reader: title 428 ～封鎖された渋谷で～ (428: Shibuya Scramble)
 -- reader: reads The story's text with furigana, TIPS and choices
+-- reader: touch press
 -- reader: version ULJS-00219, disc version 1.01
 -- reader: audio never
 -- 428 ～封鎖された渋谷で～ (Chunsoft, 2009), PSP, ULJS-00219 v1.01. EBOOT.BIN F4CEFE66.
@@ -394,6 +395,21 @@ reader.on_frame(function(frame)
             show(piece)
         end
     end
+end)
+
+-- Which answer of a choice on screen the cursor is on (a word of the game's, 0 for the first):
+-- what a tap on an answer is turned into presses with. Found by moving the cursor at the first
+-- choice in the harness and comparing memory.
+local CURSOR = 0x09775aec
+reader.on_frame(function()
+    local shown = false
+    if page.choice and page.choice.reported then
+        for _, piece in ipairs(page.pieces) do
+            if piece.window == "choice" and piece.shown then shown = true end
+        end
+    end
+    local at = shown and mem.u32(CURSOR)
+    if at and at < 8 then reader.cursor(at) else reader.cursor(nil) end
 end)
 
 reader.on_state_loaded(function()

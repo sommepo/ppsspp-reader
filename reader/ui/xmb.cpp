@@ -50,6 +50,11 @@ Path ChoiceFile() {
 	return GetSysDirectory(DIRECTORY_SYSTEM) / "reader-menu-classic";
 }
 
+// Every game in the Games list, not only those whose text can be read: a file's presence too.
+Path AllGamesFile() {
+	return GetSysDirectory(DIRECTORY_SYSTEM) / "reader-all-games";
+}
+
 // The folders the games are looked for in, one to a line, chosen from this screen.
 Path FoldersFile() {
 	return GetSysDirectory(DIRECTORY_SYSTEM) / "reader-game-folders";
@@ -101,7 +106,28 @@ bool Readable(const std::string &id) {
 			known.insert(file.name.substr(0, file.name.size() - 4));
 		}
 	}
-	return known.count(id) != 0;
+	if (known.count(id) != 0) {
+		return true;
+	}
+#if PPSSPP_PLATFORM(ANDROID)
+	// The scripts installed in the app (Game scripts) are in its own folder, looked at again
+	// every few seconds so that one just installed counts.
+	static std::set<std::string> installed;
+	static double looked = -100.0;
+	const double now = time_now_d();
+	if (!g_extFilesDir.empty() && now - looked > 5.0) {
+		looked = now;
+		installed.clear();
+		std::vector<File::FileInfo> files;
+		File::GetFilesInDir(Path(g_extFilesDir) / "reader" / "profiles", &files, "lua");
+		for (const auto &file : files) {
+			installed.insert(file.name.substr(0, file.name.size() - 4));
+		}
+	}
+	return installed.count(id) != 0;
+#else
+	return false;
+#endif
 }
 
 /// The games: what lies in the folders chosen here, in the app's own games folder and in
@@ -225,8 +251,8 @@ uint32_t WithAlpha(uint32_t color, float alpha) {
 /// touches and the mouse itself, so that everything can move as it does on the console.
 class XmbView : public UI::View {
 public:
-	XmbView(std::vector<Category> categories, int start, UI::LayoutParams *params)
-		: UI::View(params), categories_(std::move(categories)) {
+	XmbView(std::vector<Category> categories, int start, bool readable_only, UI::LayoutParams *params)
+		: UI::View(params), categories_(std::move(categories)), readable_only_(readable_only) {
 		category_ = std::clamp(g_category >= 0 ? g_category : start, 0, (int)categories_.size() - 1);
 		for (size_t i = 0; i < categories_.size(); ++i) {
 			Category &c = categories_[i];
@@ -348,6 +374,9 @@ public:
 		}
 		if (drag_ != Drag::Bar) {
 			position_ = Ease(position_, (float)category_, dt, 13.0f);
+		}
+		if (readable_only_) {
+			LeaveOutUnreadable();
 		}
 		for (size_t i = 0; i < categories_.size(); ++i) {
 			Category &c = categories_[i];
@@ -577,6 +606,42 @@ private:
 		dc.DrawTextShadow(text, bounds_.x2() - 28.0f * scale_, bounds_.y + 30.0f * scale_, 0xFFFFFFFF, ALIGN_VCENTER | ALIGN_RIGHT);
 	}
 
+	// A game's ID is read from its file in the background: once it is known, a game whose
+	// text cannot be read leaves the list. When none is left, a line says so.
+	void LeaveOutUnreadable() {
+		if (!g_gameInfoCache) {
+			return;
+		}
+		for (Category &c : categories_) {
+			bool had_game = false;
+			for (int i = 0; i < (int)c.entries.size();) {
+				const Entry &entry = c.entries[i];
+				if (entry.game.empty()) {
+					++i;
+					continue;
+				}
+				had_game = true;
+				std::shared_ptr<GameInfo> info = g_gameInfoCache->GetInfo(nullptr, entry.game, GameInfoFlags::PARAM_SFO);
+				if (!info || !info->Ready(GameInfoFlags::PARAM_SFO) || Readable(info->id)) {
+					++i;
+					continue;
+				}
+				c.entries.erase(c.entries.begin() + i);
+				if (c.selected > i) {
+					--c.selected;
+					c.position -= 1.0f;
+				}
+				c.selected = std::clamp(c.selected, 0, std::max(0, (int)c.entries.size() - 1));
+			}
+			if (had_game && std::none_of(c.entries.begin(), c.entries.end(), [](const Entry &e) { return !e.game.empty(); })) {
+				c.entries.insert(c.entries.begin(), Entry{"No games whose text can be read",
+					"Settings, Games shown: every game found is listed", ImageID("I_UMD"), Path(), [] {}});
+				c.selected = 0;
+				c.position = 0.0f;
+			}
+		}
+	}
+
 	void DrawEntry(UIContext &dc, const Entry &entry, float x, float y, float rel, float alpha, double now) {
 		const float near = std::clamp(1.0f - std::fabs(rel), 0.0f, 1.0f);
 		const float fade = alpha * (0.5f + 0.5f * near);
@@ -628,6 +693,7 @@ private:
 	}
 
 	std::vector<Category> categories_;
+	bool readable_only_ = false; ///< Games whose text cannot be read are left out
 	int category_ = 0;
 	float position_ = 0.0f;
 	float list_alpha_ = 1.0f;
@@ -658,6 +724,18 @@ private:
 
 bool Enabled() {
 	return !File::Exists(ChoiceFile());
+}
+
+bool AllGames() {
+	return File::Exists(AllGamesFile());
+}
+
+void SetAllGames(bool all) {
+	if (all) {
+		File::CreateEmptyFile(AllGamesFile());
+	} else {
+		File::Delete(AllGamesFile());
+	}
 }
 
 void SetEnabled(bool enabled) {
@@ -700,6 +778,15 @@ UI::ViewGroup *Build(const Host &host) {
 	Category settings{std::string(mm->T("Game Settings", "Settings")), ImageID("I_GEAR")};
 	settings.entries.push_back({"PPSSPP settings", "Graphics, controls, sound, network, system", ImageID("I_SLIDERS"), Path(), host.settings});
 	settings.entries.push_back({"Game folders", "Choose a folder that has your games", ImageID("I_FOLDER_OPEN"), Path(), host.folder});
+	const bool all = AllGames();
+	const auto rebuild = host.rebuild;
+	settings.entries.push_back({"Games shown", all ? "Every game found (choose for only those whose text can be read)" : "Only those whose text can be read (choose for every game found)",
+		ImageID("I_UMD"), Path(), [all, rebuild] {
+			SetAllGames(!all);
+			if (rebuild) {
+				rebuild();
+			}
+		}});
 	settings.entries.push_back({"Classic menu", "PPSSPP's own main screen", ImageID("I_HAMBURGER"), Path(), host.classic});
 	settings.entries.push_back({std::string(di->T("Exit")), "", ImageID("I_EXIT"), Path(), host.exit});
 
@@ -732,7 +819,7 @@ UI::ViewGroup *Build(const Host &host) {
 	categories.push_back(std::move(game));
 
 	AnchorLayout *root = new AnchorLayout(new LayoutParams(FILL_PARENT, FILL_PARENT));
-	XmbView *view = root->Add(new XmbView(std::move(categories), 2, new AnchorLayoutParams(FILL_PARENT, FILL_PARENT, 0.0f, 0.0f, 0.0f, 0.0f)));
+	XmbView *view = root->Add(new XmbView(std::move(categories), 2, !all, new AnchorLayoutParams(FILL_PARENT, FILL_PARENT, 0.0f, 0.0f, 0.0f, 0.0f)));
 	root->SetDefaultFocusView(view);
 	return root;
 }

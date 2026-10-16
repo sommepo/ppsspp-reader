@@ -382,6 +382,7 @@ void MainScreen::CreateViews() {
 				RecreateViews();
 			});
 		};
+		host.rebuild = [this] { RecreateViews(); };
 		host.exit = [] {
 			g_Config.Save("MainScreen::OnExit");
 			UpdateUIState(UISTATE_EXIT);

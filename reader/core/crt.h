@@ -37,6 +37,9 @@ struct Param {
     float step;
     float initial;
     const char* choices;
+    /// The tube's frame around the picture (reader_crt_frame), drawn by the computer's reader
+    /// window: not part of a look nor of Reset, and not on the Android settings page.
+    bool frame = false;
 };
 
 struct Preset {
@@ -50,7 +53,7 @@ struct Preset {
 
 [[nodiscard]] float Get(const char* key);
 void Set(const char* key, float value);
-/// Every value as at first, but for whether the picture is on.
+/// Every value as at first, but for whether the picture is on and the frame's.
 void Reset();
 /// Sets what `preset` names and everything else as at first. False when there is no such preset.
 bool ApplyPreset(const char* preset);

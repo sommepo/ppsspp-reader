@@ -118,11 +118,14 @@ protected:
 
 private:
     /// Swallow: the press called a card's question off and does nothing else.
-    enum class DownKind { None, Scrim, Box, Character, Swallow };
+    // GoOn and Answer are touch play's: a press beside the text, and one on a choice's answer.
+    enum class DownKind { None, Scrim, Box, Character, Swallow, GoOn, Answer };
     struct Down {
         DownKind kind{DownKind::None};
         QPointF position;
         bool moved{};
+        qint64 at{};    ///< when the press began (ms): a long one on an answer looks it up
+        int answer{-1}; ///< which answer of the choice, for Answer
         ReaderApp::PresentedLine presented;
         int offset{};
         QRectF rows;
@@ -217,6 +220,18 @@ private:
 
     QTimer sync_timer;
     QTimer hover_timer;
+    /// Touch play: one step of moving the game's cursor to the answer picked, then confirming.
+    QTimer pick_timer;
+    int pick_answer{-1};
+    int pick_presses{};
+    int pick_last{};
+    int pick_stuck{};
+    /// Touch play: the profile of the running game says it is played by pressing its buttons.
+    [[nodiscard]] bool PlayingByPresses() const;
+    void PressGameButton(int bit);
+    void GoOn();
+    void PickAnswer(int answer);
+    void PickStep();
     /// What the pointer rests on, to be looked up once it has rested there for a moment.
     std::optional<Down> resting;
     qint64 hovered_line{-1};

@@ -28,11 +28,17 @@ struct Host {
 	std::function<void()> folder;  ///< Let the user choose a folder that has games
 	std::function<void()> save_sync; ///< The page of save sync
 	std::function<void()> exit;
+	std::function<void()> rebuild; ///< Build the screen again (a setting of its own changed)
 };
 
 /// True unless the user chose the emulator's own main screen.
 bool Enabled();
 void SetEnabled(bool enabled);
+
+/// The Games list shows every game found, not only those whose text can be read (off unless
+/// the user switches it on).
+bool AllGames();
+void SetAllGames(bool all);
 
 /// A folder the user chose for their games: looked in from now on.
 void RememberFolder(const std::string &folder);

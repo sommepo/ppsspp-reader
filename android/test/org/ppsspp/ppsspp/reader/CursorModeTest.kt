@@ -166,6 +166,9 @@ class CursorModeTest {
         HoverCursor.holdSticks = { held -> told.add(held) }
         HoverCursor.watchButton = {}
         activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        // Of the reader's taps alone: touch play has tests of its own (ScreenTextOverlayTest).
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(activity).edit()
+            .putBoolean(ReaderSettings.KEY_TOUCH_PLAY, false).commit()
         activity.setTheme(com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar)
         root = FrameLayout(activity)
         game = GamePicture(activity).apply {

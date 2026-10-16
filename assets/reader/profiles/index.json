@@ -9,8 +9,8 @@
       "version": "ULJM-05718",
       "api": 1,
       "file": "ULJM05718.lua",
-      "size": 11834,
-      "sha256": "1f1103378a6af2e009599f28267b1b8b327480136458043a059bec3d2e5300f6"
+      "size": 12174,
+      "sha256": "0f7f86d615af5b4f264af2dbc342b7330af2de7eeb2bb339b81f61320a694560"
     },
     {
       "id": "ULJM05719",
@@ -19,8 +19,8 @@
       "version": "ULJM-05719",
       "api": 1,
       "file": "ULJM05719.lua",
-      "size": 11840,
-      "sha256": "7a2bd3451e5df94b55dff42bf7bec2cc240fc931ad7e38db44ce3f741948a11b"
+      "size": 12180,
+      "sha256": "5948f7f71ba6fce4c92ee004e05533547f0666396d24c4bfff052bf9b1f1b6d0"
     },
     {
       "id": "ULJM05821",
@@ -29,8 +29,8 @@
       "version": "ULJM-05821",
       "api": 1,
       "file": "ULJM05821.lua",
-      "size": 8319,
-      "sha256": "7938c5e63294a42d9a2086c26479456516b24eccbda9d1d60b87c3857d6513fe"
+      "size": 8389,
+      "sha256": "17756de6bdb15037492d17c45376b143058150b8f5b5c30ef5514922d01f9808"
     },
     {
       "id": "ULJM05887",
@@ -39,8 +39,8 @@
       "version": "ULJM-05887",
       "api": 1,
       "file": "ULJM05887.lua",
-      "size": 19420,
-      "sha256": "0c270ea507b6423cdfae1c2dace9019214569a35c59415f0bddb6068d6dc14a8"
+      "size": 19510,
+      "sha256": "c29c87116b803fa0ab0ee248a97bb0025eaffdfe7839631dc77f6b987016ec43"
     },
     {
       "id": "ULJS00219",
@@ -49,8 +49,8 @@
       "version": "ULJS-00219, disc version 1.01",
       "api": 1,
       "file": "ULJS00219.lua",
-      "size": 16477,
-      "sha256": "de06dab1fcb8115a73c2aacf9f01534a0f7890768f5279f9643939fd3d452109"
+      "size": 17129,
+      "sha256": "bd6826aac7b4cf3c5942c6bfb8b75373073847282d5b25e7b56a8421a87386bd"
     }
   ]
 }

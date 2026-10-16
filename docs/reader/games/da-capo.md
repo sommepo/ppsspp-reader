@@ -85,6 +85,14 @@ profile gives them 12, and 5 for the thin ones, so their cells and those after t
 row are near, not exact. **None was met in the games' own text**, which writes its digits
 and letters full-width; the widths were measured with made-up lines only.
 
+## Played by touch
+
+With *Play by touch* (Reader settings, on unless switched off) both discs are played by touch
+alone (`-- reader: touch press`): a tap beside the text presses ○, a tap on an answer moves the
+cursor to it and presses ○. The cursor is the choice's byte at `+0x65` (above), reported with
+`reader.cursor` while the answers are up. **Not tried**: the discs were not on this machine on
+2026-10-16 when this was written, so it rests on the notes above.
+
 ## Buttons
 
 Circle advances (on a line still being spoken the first press ends the typing, the second

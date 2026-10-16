@@ -25,6 +25,8 @@ namespace Games {
 /// What the profile of the game `title_id` says of its lines' audio ("never", "ask",
 /// "always"), or an empty string.
 [[nodiscard]] QString AudioOf(const QString& title_id);
+/// How the profile of the game says it is played by touch: "game", "press" or empty.
+[[nodiscard]] QString TouchOf(const QString& title_id);
 /// Looks again at the next question: after a profile was added or removed.
 void Forget();
 /**

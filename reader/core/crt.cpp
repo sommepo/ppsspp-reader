@@ -79,6 +79,15 @@ const std::vector<Param> kParams = {
     {"grain", "Grain", "Signal", "Snow in the signal.", Kind::Slider, 0, 1, 0.05f, 0.25f, nullptr},
     {"flicker", "Flicker", "Signal", "A hum bar that wanders up the picture, and lines that tremble.",
      Kind::Slider, 0, 1, 0.05f, 0.20f, nullptr},
+
+    {"frame", "Frame", "Frame",
+     "The tube's surround: the plastic, the deep recess the glass sits in and the shadow it casts.",
+     Kind::Choice, 0, 3, 1, 1, "0=None|1=Charcoal|2=Black|3=Beige", true},
+    {"frame_room", "Room", "Frame",
+     "Lit: a lamp in the room lights the plastic. Dark: only the picture does.", Kind::Choice, 0, 1,
+     1, 0, "0=Lit|1=Dark", true},
+    {"frame_wear", "Wear", "Frame", "Dust in the recess, grime in the seams, plastic aged by the years.",
+     Kind::Slider, 0, 1, 0.05f, 0.50f, nullptr, true},
 };
 
 enum Index {
@@ -104,6 +113,9 @@ enum Index {
     Convergence,
     Grain,
     Flicker,
+    FrameColour,
+    FrameRoom,
+    FrameWear,
     Count
 };
 
@@ -269,7 +281,9 @@ void Set(const char* key, float value) {
 
 void Reset() {
     for (int i = 1; i < Count; i++) {
-        Set(kParams[i].key, kParams[i].initial);
+        if (!kParams[i].frame) {
+            Set(kParams[i].key, kParams[i].initial);
+        }
     }
 }
 
@@ -278,7 +292,8 @@ bool ApplyPreset(const char* preset) {
         if (std::strcmp(entry.key, preset) == 0) {
             Reset();
             EachPair(entry.values, [](const char* key, float value) {
-                if (std::strcmp(key, "enabled") != 0) {
+                const int index = IndexOf(key);
+                if (index > 0 && !kParams[index].frame) {
                     Set(key, value);
                 }
             });
@@ -302,7 +317,7 @@ std::string CurrentPreset() {
         });
         bool same = true;
         for (int i = 1; i < Count && same; i++) {
-            same = std::fabs(wanted[i] - Value(i)) < 0.001f;
+            same = kParams[i].frame || std::fabs(wanted[i] - Value(i)) < 0.001f;
         }
         if (same) {
             return entry.key;

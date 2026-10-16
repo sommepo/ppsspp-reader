@@ -8,6 +8,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "reader/core/crt.h"
+#include "reader/core/crt_frame.h"
 
 namespace Crt = Reader::Crt;
 using Catch::Approx;
@@ -218,4 +219,33 @@ TEST_CASE("CRT: the shader's text is there for both languages", "[crt]") {
     REQUIRE(body.find("CRT_U(7)") != std::string::npos);
     REQUIRE(body.find("CRT_U(8)") == std::string::npos); // eight vectors, no more
     REQUIRE(std::string(Crt::HlslDefines()).find("float3") != std::string::npos);
+}
+
+TEST_CASE("CRT: the tube's frame leaves the glass clear and is the same for every app", "[crt]") {
+    Reader::Crt::Set("enabled", 1.f);
+    Reader::Crt::Set("frame", 1.f); // charcoal
+    Reader::Crt::Set("frame_wear", 0.5f);
+    REQUIRE(Reader::Crt::Frame::Wanted());
+    // A 4:3 picture in the middle of a 16:9 screen, as a PS2 game on a handheld.
+    const int W = 320, H = 180;
+    const float left = 40, top = 0, pw = 240, ph = 180;
+    const auto straight = Reader::Crt::Frame::Draw(W, H, left, top, pw, ph, false);
+    const auto pre = Reader::Crt::Frame::Draw(W, H, left, top, pw, ph, true);
+    REQUIRE(straight.size() == static_cast<std::size_t>(W * H));
+    const auto at = [&](const std::vector<std::uint32_t>& p, int x, int y) { return p[y * W + x]; };
+    // The middle of the glass: nothing over the picture.
+    CHECK((at(straight, W / 2, H / 2) >> 24) == 0);
+    // Beside the picture: the case, solid.
+    CHECK((at(straight, 5, H / 2) >> 24) == 255);
+    CHECK((at(straight, W - 5, H / 2) >> 24) == 255);
+    // Where the case is solid, straight and premultiplied colours are the same.
+    CHECK(at(straight, 5, H / 2) == at(pre, 5, H / 2));
+    // A premultiplied colour is never above its alpha.
+    for (const std::uint32_t c : pre) {
+        const std::uint32_t a = c >> 24;
+        CHECK(((c >> 16) & 0xff) <= a);
+    }
+    Reader::Crt::Set("frame", 0.f); // none
+    CHECK_FALSE(Reader::Crt::Frame::Wanted());
+    CHECK(Reader::Crt::Frame::Draw(W, H, left, top, pw, ph, false).empty());
 }

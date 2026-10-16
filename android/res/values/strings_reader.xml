@@ -187,6 +187,9 @@
     <string name="reader_pref_popup_hide_on_exit_summary">When the cursor is off the word and off the popup</string>
     <string name="reader_pref_popup_height">Popup height limit (% of the screen)</string>
     <string name="reader_pref_screen_text_outline">Outline what can be tapped</string>
+    <string name="reader_pref_touch_play">Play by touch</string>
+    <string name="reader_pref_touch_play_summary">A tap beside the text goes on, a tap on an answer picks it; hold a finger on an answer to look its words up</string>
+    <string name="reader_touch_pick_unknown">This game\'s answers are picked with the controller: its profile does not say where the cursor is</string>
     <string name="reader_pref_category_cursor">Cursor</string>
     <string name="reader_pref_cursor_button">Cursor button</string>
     <string name="reader_pref_second_screen">Trackpad on the second display</string>
@@ -348,4 +351,28 @@
     <string name="reader_pref_stats_server_summary">Eden Reader\'s save sync service, for example 192.168.1.50:8642. Empty: nothing is sent</string>
     <string name="reader_pref_stats_code">Code of the service</string>
     <string name="reader_pref_stats_device">This device\'s name</string>
+    <string name="reader_pref_word_mark">Mark the word looked up</string>
+    <string name="reader_pref_card_corner">Where the add button stands</string>
+    <string-array name="reader_card_corner_entries">
+        <item>Bottom left</item>
+        <item>Bottom right</item>
+        <item>Top left</item>
+        <item>Top right</item>
+    </string-array>
+    <string-array name="reader_card_corner_values" translatable="false">
+        <item>bottom_left</item>
+        <item>bottom_right</item>
+        <item>top_left</item>
+        <item>top_right</item>
+    </string-array>
+    <string-array name="reader_word_mark_entries">
+        <item>Outline</item>
+        <item>Highlight</item>
+        <item>Not at all</item>
+    </string-array>
+    <string-array name="reader_word_mark_values" translatable="false">
+        <item>outline</item>
+        <item>highlight</item>
+        <item>none</item>
+    </string-array>
 </resources>

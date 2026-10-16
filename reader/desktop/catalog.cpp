@@ -34,7 +34,12 @@ ProfileInfo Describe(const QString& title_id, const QString& source, bool own) {
     }
     return ProfileInfo{title_id, said.value(QStringLiteral("title"), title_id),
                        said.value(QStringLiteral("reads")), said.value(QStringLiteral("version")),
-                       own, said.value(QStringLiteral("audio")).toLower()};
+                       own, said.value(QStringLiteral("audio")).toLower(), [&said] {
+                           const QString how = said.value(QStringLiteral("touch")).toLower();
+                           return how == QStringLiteral("game") || how == QStringLiteral("press")
+                                      ? how
+                                      : QString();
+                       }()};
 }
 
 std::optional<QString> TitleIdOf(const QString& file_name) {

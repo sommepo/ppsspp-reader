@@ -3,6 +3,7 @@
 
 package org.ppsspp.ppsspp.reader.ui
 
+import org.ppsspp.ppsspp.reader.screen.Area
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -53,6 +54,7 @@ class ReaderBacklogActivity : ReaderScreen() {
         super.onCreate(savedInstanceState)
         db = ReaderSession.database(this)
         settings = ReaderSettings(this)
+        ReaderTextView.markStyle = settings.wordMark
         game = intent.getStringExtra(EXTRA_GAME) ?: ReaderSession.gameKey
 
         val search = EditText(this).apply {
@@ -201,9 +203,10 @@ class ReaderBacklogActivity : ReaderScreen() {
             val presented = ReaderSession.recentLine(entry.id)
                 ?: PresentedLine(line, LineAccounting(entry.characters, entry.reread, true, null), entry.id)
             holder.text.onCharacterTap = { offset, bounds ->
-                // Beside the line, at the tapped word.
-                val row = LookupLayer.areaOf(holder.text, lookups)
-                lookups.lookup(holder.text, presented, offset, LookupLayer.Anchor(row, row.left + bounds.left))
+                // Right next to the tapped word, above or below its row.
+                val area = LookupLayer.areaOf(holder.text, lookups)
+                val row = Area(area.left, area.top + bounds.top, area.right, area.top + bounds.bottom)
+                lookups.lookup(holder.text, presented, offset, LookupLayer.Anchor(row, area.left + bounds.left))
             }
             holder.text.onLongPress = {
                 ReaderSession.copyToClipboard(line.text)

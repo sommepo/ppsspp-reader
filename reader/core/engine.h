@@ -206,6 +206,17 @@ public:
     bool Execute(const std::string& code, std::string& output);
     [[nodiscard]] bool HasProfile() const;
     [[nodiscard]] std::string LastError() const;
+
+    /// Where the game's cursor is among the answers of the choice on screen, as the profile
+    /// reports it (reader.cursor): what lets a tap on an answer be turned into presses of the
+    /// controller. `index` is -1 while no answer is under it yet.
+    struct AnswerCursor {
+        int index{};
+        bool horizontal{}; ///< the answers are side by side: left and right move it
+    };
+    [[nodiscard]] std::optional<AnswerCursor> Cursor() const;
+    /// Used by the Lua bindings.
+    void SetCursor(std::optional<AnswerCursor> cursor);
     /// The running game's ID as its disc or package gives it ("ULJS00219"), or empty.
     [[nodiscard]] std::string GameId() const;
     [[nodiscard]] u64 Frame() const {
@@ -306,6 +317,7 @@ private:
     std::atomic<bool> has_hooks{false};
     std::vector<FrameCallback> frame_callbacks;
     std::vector<int> state_callbacks;
+    std::optional<AnswerCursor> cursor;
 
     /// What is known about a window that events were emitted for.
     struct WindowText {

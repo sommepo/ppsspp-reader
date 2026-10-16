@@ -81,6 +81,11 @@ moment, takes the phone out** (a short press does nothing): in its menu circle c
 cross goes back, up and down scroll a mail. Where the story waits for the phone (a small
 phone beside the line), circle does not advance.
 
+Played by touch (the Fold), its column of buttons is `up down left right circle cross square
+triangle`: left and right since 2026-10-16, for the questions whose はい and いいえ stand side by
+side (loading a save: "このデータで開始しますか?", いいえ lit at first), which up and down do not
+move.
+
 ## How it was checked
 
 - **Harness** (the real game): from the prologue into chapter 1, some 1,350 lines pressed

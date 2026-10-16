@@ -216,6 +216,7 @@ void LookupFlow::OnLookupDone(int request, const PresentedLine& presented, int o
         word_last = offset + static_cast<int>(results.first().matched_text.size()) - 1;
         pinned = Pinned{presented, offset, results, {}};
         popup->SetAllowDuplicates(settings.AnkiAllowDuplicates());
+        popup->SetCardCorner(LookupPopup::CornerOf(settings.CardCorner()));
         popup->ShowResults(results);
         AskAnki();
     }
@@ -238,7 +239,7 @@ void LookupFlow::Position() {
     if (!anchor.owner || !anchor.bounds.isValid()) {
         return;
     }
-    // Above the text if it fits there, else below, else on the side with more room and only
+    // Above what it keeps clear of (the word's row) if it fits there, else below, else on the side with more room and only
     // as tall as that room. It is only as large as its content.
     const QRect& bounds = anchor.bounds;
     auto& settings = ReaderSession::Instance().Settings();

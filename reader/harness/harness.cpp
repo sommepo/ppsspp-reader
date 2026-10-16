@@ -408,6 +408,11 @@ public:
                 __CtrlSetAnalogXY(0, std::clamp(x, -1.0f, 1.0f), std::clamp(y, -1.0f, 1.0f));
             } else if (command == "shot") {
                 Screenshot(rest(), reply);
+            } else if (command == "cursor") {
+                // Which answer of the choice on screen the profile says the cursor is on.
+                const auto cursor = Reader::Engine::Instance().Cursor();
+                reply.body += cursor ? std::to_string(cursor->index) + (cursor->horizontal ? " horizontal" : "") + "\n"
+                                     : std::string("none\n");
             } else if (command == "events") {
                 std::scoped_lock lock{output_mutex};
                 for (const auto& event : events) {

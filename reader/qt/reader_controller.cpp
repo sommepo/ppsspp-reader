@@ -30,6 +30,7 @@
 #include "reader/qt/reader_steam.h"
 #include "reader/qt/reader_dialogs.h"
 #include "reader/core/emulator.h"
+#include "reader/core/engine.h"
 #include "reader/core/input_filter.h"
 #include "reader/qt/reader_games.h"
 #include "reader/qt/reader_session.h"
@@ -43,6 +44,14 @@ namespace {
 
 /// How far the pointer may wander between going down and up and still have clicked.
 constexpr qreal ClickSlop = 8.0;
+// Touch play: a press held this long on an answer looks it up instead of picking it; how long a
+// button of the game is held; the steps of moving the cursor to an answer; the PSP's buttons
+// (bits of its button word).
+constexpr qint64 LongPressMs = 500;
+constexpr int PressMs = 80;
+constexpr int PickStepMs = 220;
+constexpr int MaxPickPresses = 48;
+constexpr int PspUp = 4, PspRight = 5, PspDown = 6, PspLeft = 7, PspCircle = 13;
 /// How long the pointer rests on a word before it is looked up.
 constexpr int HoverMs = 140;
 constexpr int CaptureRetryMs = 60;
@@ -574,6 +583,14 @@ PlacedText::Hit ReaderController::HitAt(const QPointF& position) {
     return box;
 }
 
+namespace {
+/// What the popup keeps clear of: the row of the character looked up, across its text. The
+/// popup stands right next to the word, over the text's other rows if need be.
+QRectF RowOf(const PlacedText& text, const PlacedText::Glyph& glyph) {
+    return QRectF(text.rows.left(), glyph.drawn.top(), text.rows.width(), glyph.drawn.height());
+}
+} // namespace
+
 void ReaderController::UpdateMarks() {
     QList<QRectF> marks;
     if (mark_line >= 0 && mark_first >= 0) {
@@ -583,6 +600,7 @@ void ReaderController::UpdateMarks() {
             }
         }
     }
+    overlay->SetMarkStyle(ReaderSession::Instance().Settings().WordMark());
     overlay->SetMarks(marks);
 }
 
@@ -683,10 +701,21 @@ bool ReaderController::OnPointerPress(const QPointF& position, bool left_button)
     // The picture may have moved since the last look.
     RefreshPlaced();
     const PlacedText::Hit hit = HitAt(position);
+    const bool pressing = PlayingByPresses();
+    down.at = QDateTime::currentMSecsSinceEpoch();
     if (hit.kind == PlacedText::HitKind::Outside) {
         if (lookups->IsOpen()) {
             // Beside an open popup: the click closes it and never clicks what lies beneath.
             down.kind = DownKind::Scrim;
+            return true;
+        }
+        if (pressing) {
+            // Touch play: the player goes on; while a choice is up a click beside it would
+            // confirm whatever answer is lit, so it does nothing (an answer is clicked).
+            const bool choice = std::any_of(placed.begin(), placed.end(), [](const PlacedText& text) {
+                return text.presented.line.IsChoice();
+            });
+            down.kind = choice ? DownKind::Swallow : DownKind::GoOn;
             return true;
         }
         return false;
@@ -699,6 +728,15 @@ bool ReaderController::OnPointerPress(const QPointF& position, bool left_button)
         down.kind = DownKind::Character;
         down.offset = hit.glyph->offset;
         down.near_x = hit.glyph->drawn.left();
+        down.rows = RowOf(*hit.text, *hit.glyph);
+        if (pressing && down.presented.line.IsChoice()) {
+            // Touch play: an answer picked (a long press still looks its word up).
+            down.kind = DownKind::Answer;
+            down.answer = static_cast<int>(
+                down.presented.line.text.left(down.offset).count(QLatin1Char('\n')));
+        }
+    } else if (pressing && !down.presented.line.IsChoice()) {
+        down.kind = DownKind::GoOn; // in a message's box beside its words
     } else {
         down.kind = DownKind::Box;
     }
@@ -757,7 +795,25 @@ void ReaderController::OnPointerRelease(const QPointF&) {
     if (released.moved) {
         return;
     }
+    const bool held = QDateTime::currentMSecsSinceEpoch() - released.at >= LongPressMs;
     switch (released.kind) {
+    case DownKind::GoOn:
+        if (lookups->IsOpen()) {
+            lookups->Close();
+        } else {
+            GoOn();
+        }
+        break;
+    case DownKind::Answer:
+        if (!held) {
+            if (lookups->IsOpen()) {
+                lookups->Close();
+            } else {
+                PickAnswer(released.answer);
+            }
+            break;
+        }
+        [[fallthrough]];
     case DownKind::Character:
         hovered_line = released.presented.backlog_id;
         hovered_offset = released.offset;
@@ -772,6 +828,63 @@ void ReaderController::OnPointerRelease(const QPointF&) {
     case DownKind::None:
         break;
     }
+}
+
+bool ReaderController::PlayingByPresses() const {
+    auto& session = ReaderSession::Instance();
+    return session.IsActive() && session.Settings().TouchPlay() &&
+           Games::TouchOf(session.GameKey()) == QStringLiteral("press");
+}
+
+void ReaderController::PressGameButton(int bit) {
+    Reader::Emu::PressButton(bit, true);
+    QTimer::singleShot(PressMs, this, [bit] { Reader::Emu::PressButton(bit, false); });
+}
+
+void ReaderController::GoOn() {
+    PressGameButton(PspCircle);
+}
+
+void ReaderController::PickAnswer(int answer) {
+    if (!Reader::Engine::Instance().Cursor()) {
+        Notify(tr("This game's answers are picked with the controller: its script does not say "
+                  "where the cursor is"));
+        return;
+    }
+    pick_answer = answer;
+    pick_presses = 0;
+    pick_last = std::numeric_limits<int>::min();
+    pick_stuck = 0;
+    PickStep();
+}
+
+void ReaderController::PickStep() {
+    const auto cursor = Reader::Engine::Instance().Cursor();
+    if (!cursor || pick_answer < 0 || pick_presses >= MaxPickPresses) {
+        pick_answer = -1;
+        return;
+    }
+    if (cursor->index == pick_answer) {
+        pick_answer = -1;
+        GoOn();
+        return;
+    }
+    // A press that leaves the cursor where it was, twice: something else has the input (a game's
+    // lesson over its first choice wants the confirm button first). Confirm once.
+    pick_stuck = cursor->index == pick_last ? pick_stuck + 1 : 0;
+    pick_last = cursor->index;
+    if (pick_stuck >= 2) {
+        pick_stuck = 0;
+        pick_last = std::numeric_limits<int>::min();
+        GoOn();
+        ++pick_presses;
+        QTimer::singleShot(PickStepMs, this, [this] { PickStep(); });
+        return;
+    }
+    const bool forward = cursor->index < pick_answer;
+    PressGameButton(cursor->horizontal ? (forward ? PspRight : PspLeft) : (forward ? PspDown : PspUp));
+    ++pick_presses;
+    QTimer::singleShot(PickStepMs, this, [this] { PickStep(); });
 }
 
 void ReaderController::HoverAt(const QPointF& position) {
@@ -885,7 +998,7 @@ void ReaderController::RestOn(const QPointF& position) {
     target.kind = DownKind::Character;
     target.presented = hit.text->presented;
     target.offset = hit.glyph->offset;
-    target.rows = hit.text->rows;
+    target.rows = RowOf(*hit.text, *hit.glyph);
     target.near_x = hit.glyph->drawn.left();
     target.position = position;
     resting = target;

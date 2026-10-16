@@ -6,6 +6,8 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QTextBlock>
+#include <QTextBlockFormat>
+#include <QTextCursor>
 #include <QTextDocument>
 #include <QTextLayout>
 #include <QWheelEvent>
@@ -73,6 +75,23 @@ LookupPopup::~LookupPopup() = default;
 
 void LookupPopup::SetTextScale(int percent) {
     text_scale = std::clamp(percent, 50, 250);
+}
+
+void LookupPopup::SetCardCorner(Corner corner) {
+    card_corner = corner;
+}
+
+LookupPopup::Corner LookupPopup::CornerOf(const QString& value) {
+    if (value == QStringLiteral("bottom_right")) {
+        return Corner::BottomRight;
+    }
+    if (value == QStringLiteral("top_left")) {
+        return Corner::TopLeft;
+    }
+    if (value == QStringLiteral("top_right")) {
+        return Corner::TopRight;
+    }
+    return Corner::BottomLeft;
 }
 
 void LookupPopup::SetAllowDuplicates(bool allow) {
@@ -292,32 +311,55 @@ void LookupPopup::Layout(int max_width, int max_height) {
             y += 1; // the line between two headwords
         }
         entry.top = y;
+        entry.text_top = EntryTop;
+        const int boxes = BoxCount(entry);
+        const int boxes_width = boxes * (box + BoxGap);
+        const bool top = card_corner == Corner::TopLeft || card_corner == Corner::TopRight;
+        const bool left = card_corner == Corner::TopLeft || card_corner == Corner::BottomLeft;
+        // Top left: the headline begins after the boxes (its first line is indented).
+        {
+            QTextCursor cursor{entry.document->firstBlock()};
+            QTextBlockFormat format = cursor.blockFormat();
+            const qreal indent = card_corner == Corner::TopLeft && boxes > 0 ? boxes_width : 0;
+            if (format.textIndent() != indent) {
+                format.setTextIndent(indent);
+                cursor.setBlockFormat(format);
+            }
+        }
         entry.document->setTextWidth(content_width);
         const int text_height = static_cast<int>(std::ceil(entry.document->size().height()));
         int height = EntryTop + text_height + EntryBottom;
         entry.add_box = QRect();
         entry.book_box = QRect();
-        const int boxes = BoxCount(entry);
         if (boxes > 0) {
-            const int boxes_width = boxes * (box + BoxGap);
-            // The boxes stand in the bottom right corner. Where the last line of the text
-            // leaves them no room, they get a row of their own.
-            qreal last_line = 0;
-            const QTextBlock block = entry.document->lastBlock();
-            if (const QTextLayout* layout = block.layout(); layout && layout->lineCount() > 0) {
-                last_line = layout->lineAt(layout->lineCount() - 1).naturalTextWidth();
+            // The boxes stand in the chosen corner. Bottom left: a row of their own under the
+            // text. Bottom right and top right: beside the last or the first line, or a row of
+            // their own where that line leaves them no room. Top left: before the headline.
+            bool own_row = card_corner == Corner::BottomLeft;
+            if (card_corner == Corner::BottomRight || card_corner == Corner::TopRight) {
+                const QTextBlock block = top ? entry.document->firstBlock() : entry.document->lastBlock();
+                qreal line = 0;
+                if (const QTextLayout* layout = block.layout(); layout && layout->lineCount() > 0) {
+                    line = layout->lineAt(top ? 0 : layout->lineCount() - 1).naturalTextWidth();
+                }
+                own_row = line + boxes_width > content_width;
             }
-            if (last_line + boxes_width > content_width) {
+            if (own_row) {
                 height += box + 2;
+                if (top) {
+                    entry.text_top += box + 2;
+                }
             } else {
                 height = std::max(height, EntryTop + box + EntryBottom);
             }
-            int x = content_width - box;
-            const int box_top = entry.top + height - EntryBottom + 1 - box;
+            const int box_top = top ? entry.top + EntryTop - 1 : entry.top + height - EntryBottom + 1 - box;
+            // The plus is the one nearer the corner, the book beside it.
+            int x = left ? 0 : content_width - box;
+            const int step = left ? box + BoxGap : -(box + BoxGap);
             const bool in_deck = entry.state == CardState::InDeck;
             if (!in_deck || allow_duplicates) {
                 entry.add_box = QRect(x, box_top, box, box);
-                x -= box + BoxGap;
+                x += step;
             }
             if (in_deck) {
                 entry.book_box = QRect(x, box_top, box, box);
@@ -435,11 +477,11 @@ void LookupPopup::paintEvent(QPaintEvent*) {
         }
         if (entry.is_result) {
             Style::PaintPopupEntry(painter, QRectF(0, entry.top, content_width, entry.height),
-                                   QRectF(0, entry.top + EntryTop, content_width, Scaled(HeadPx) * 1.35),
+                                   QRectF(0, entry.top + entry.text_top, content_width, Scaled(HeadPx) * 1.35),
                                    i == 0);
         }
         painter.save();
-        painter.translate(0, entry.top + EntryTop);
+        painter.translate(0, entry.top + entry.text_top);
         entry.document->drawContents(&painter);
         painter.restore();
         const bool working = entry.state == CardState::Working;

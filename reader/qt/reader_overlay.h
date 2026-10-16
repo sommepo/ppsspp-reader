@@ -11,11 +11,14 @@
 #include <QRectF>
 #include <QString>
 #include <QStringList>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QWidget>
 
 class QPainter;
 #include "reader/desktop/screen_text.h"
+#include "reader/qt/reader_crt_frame.h"
+#include "reader/qt/reader_mark_glide.h"
 
 namespace ReaderUi {
 
@@ -83,6 +86,8 @@ public:
 
     /// Where the word being looked up is, in this window's coordinates.
     void SetMarks(const QList<QRectF>& marks_);
+    /// How the marks are drawn: "highlight" (filled), "outline" (framed) or "none".
+    void SetMarkStyle(const QString& style);
     /// What can be clicked, drawn to check that it sits on the game's text (a setting).
     void SetOutlines(const QList<ReaderApp::PlacedText>& texts);
     /// The session so far, shown in the top right corner of `picture`. Empty for none.
@@ -117,9 +122,26 @@ protected:
     void paintEvent(QPaintEvent* event) override;
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
+
+private:
+    void GlideFrame();
+    /// The tube's frame made anew if the window, the picture or the CRT settings changed.
+    void RefreshFrame();
+    /// Where the cursor is drawn, to redraw no more than that when it moves.
+    [[nodiscard]] QRect CursorArea() const;
 
 private:
     QList<QRectF> marks;
+    /// The mark as drawn, on its way to `marks`, and the window's size it was placed for.
+    MarkGlide mark_glide;
+    QSize marks_size;
+    QTimer glide_timer;
+    QElapsedTimer glide_clock;
+    /// The tube's frame around the picture (CRT settings, "Frame"), under all the rest.
+    CrtFrame crt_frame;
+    QTimer frame_timer;
+    QString mark_style{QStringLiteral("outline")};
     QList<QRectF> outline_boxes;
     QList<QRectF> outline_cells;
     QString session_line;

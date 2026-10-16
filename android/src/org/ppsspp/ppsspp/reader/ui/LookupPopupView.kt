@@ -37,10 +37,11 @@ import org.ppsspp.ppsspp.reader.dict.TermEntry
 /**
  * The dictionary popup, kept as small as it can be: it is only as wide and as tall as what it
  * says. Per headword there is one line with the word, its reading and how it was inflected,
- * then one line per sense with its glosses run together. In the bottom right corner of each
- * headword's part sits a boxed button: a plus to make a card, or an open book when Anki has the
- * word already. Where a headword's part runs on below what the popup shows, its box waits in
- * the popup's own bottom right corner, so it can be pressed without scrolling.
+ * then one line per sense with its glosses run together. In a corner of each headword's part
+ * (the bottom left unless the settings choose another, [cardCorner]) sits a boxed button: a
+ * plus to make a card, or an open book when Anki has the word already. Where a headword's part
+ * runs on past what the popup shows, its box waits at the popup's own edge on that side, so it
+ * can be pressed without scrolling.
  */
 @SuppressLint("ViewConstructor")
 class LookupPopupView(context: Context) : FrameLayout(context) {
@@ -62,6 +63,22 @@ class LookupPopupView(context: Context) : FrameLayout(context) {
 
     /** Keep offering the plus beside the book for a word Anki already has. */
     var allowDuplicates = false
+
+    /** The corner of a headword's part where its boxes stand. */
+    enum class Corner(val top: Boolean, val left: Boolean) {
+        TOP_LEFT(true, true),
+        TOP_RIGHT(true, false),
+        BOTTOM_LEFT(false, true),
+        BOTTOM_RIGHT(false, false);
+
+        companion object {
+            /** From the setting's value ("bottom_left" and so on); the bottom left otherwise. */
+            fun of(value: String?): Corner = values().firstOrNull { it.name.equals(value, ignoreCase = true) } ?: BOTTOM_LEFT
+        }
+    }
+
+    /** Where the boxes stand: set before [showResults]. */
+    var cardCorner = Corner.BOTTOM_LEFT
 
     /** The popup grows with its content up to these, then wraps and scrolls. */
     var maxWidth: Int = Int.MAX_VALUE
@@ -112,6 +129,9 @@ class LookupPopupView(context: Context) : FrameLayout(context) {
     /** One headword's part of the popup. */
     private class Entry(
         val result: LookupResult,
+        val column: View,
+        val headline: TextView,
+        val headlineText: CharSequence,
         val last: TextView,
         val lastText: CharSequence,
         val add: ImageButton,
@@ -141,15 +161,20 @@ class LookupPopupView(context: Context) : FrameLayout(context) {
     }
 
     /**
-     * Keeps every box in reach: one whose headword runs on below what is shown is moved up to
-     * the bottom edge of what is shown, as long as that keeps it within its headword's part.
+     * Keeps every box in reach: one whose headword runs on below what is shown (above it, for a
+     * box in a top corner) is moved to that edge of what is shown, as long as that keeps it
+     * within its headword's part.
      */
     private fun placeBoxes() {
+        val shownFrom = scroll.scrollY
         val shownTo = scroll.scrollY + scroll.height - scroll.paddingTop - scroll.paddingBottom
         for (entry in entries.values) {
-            val hidden = entry.view.bottom - shownTo
             val most = (entry.view.height - entry.actions.height).coerceAtLeast(0)
-            entry.actions.translationY = -hidden.coerceIn(0, most).toFloat()
+            entry.actions.translationY = if (cardCorner.top) {
+                (shownFrom - entry.view.top).coerceIn(0, most).toFloat()
+            } else {
+                -(entry.view.bottom - shownTo).coerceIn(0, most).toFloat()
+            }
         }
     }
 
@@ -200,6 +225,7 @@ class LookupPopupView(context: Context) : FrameLayout(context) {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(3f).toInt(), 0, bottomRoom())
         }
+        val corner = cardCorner
         val headline = label("", HEAD_SP, ReaderStyle.POPUP_TEXT)
         column.addView(headline, LinearLayout.LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
         val senses = senses(result)
@@ -215,16 +241,18 @@ class LookupPopupView(context: Context) : FrameLayout(context) {
             lastText = headline(result)
         }
 
-        val add = box(R.drawable.ic_reader_add, R.string.reader_lookup_add, ReaderStyle.POPUP_SIGN)
+        val add = box(R.drawable.ic_reader_add, R.string.reader_lookup_add, ReaderStyle.POPUP_SIGN, corner)
         add.setOnClickListener { onAdd?.invoke(result) }
-        val book = box(R.drawable.ic_reader_open_book, R.string.reader_lookup_in_deck, ReaderStyle.POPUP_BOOK_SIGN)
+        val book = box(R.drawable.ic_reader_open_book, R.string.reader_lookup_in_deck, ReaderStyle.POPUP_BOOK_SIGN, corner)
         book.setOnClickListener { onShowNotes?.invoke(result) }
         val actions = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
         val size = LinearLayout.LayoutParams(boxSize() + slopLeft(), boxSize() + slopTop())
-        actions.addView(book, LinearLayout.LayoutParams(size))
-        actions.addView(add, LinearLayout.LayoutParams(size))
+        // The plus is the one nearer the corner, the book beside it.
+        for (box in if (corner.left) listOf(add, book) else listOf(book, add)) {
+            actions.addView(box, LinearLayout.LayoutParams(size))
+        }
 
-        val entry = Entry(result, last, lastText, add, book, actions)
+        val entry = Entry(result, column, headline, if (senses.isNotEmpty()) headline.text else lastText, last, lastText, add, book, actions)
         entries[result] = entry
         apply(entry)
         entry.view = FrameLayout(context).apply {
@@ -232,7 +260,10 @@ class LookupPopupView(context: Context) : FrameLayout(context) {
             addView(column, LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT))
             addView(
                 actions,
-                LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END)
+                LayoutParams(
+                    LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT,
+                    (if (corner.top) Gravity.TOP else Gravity.BOTTOM) or (if (corner.left) Gravity.START else Gravity.END)
+                )
             )
         }
         return entry.view
@@ -248,15 +279,35 @@ class LookupPopupView(context: Context) : FrameLayout(context) {
         entry.add.alpha = if (working) 0.4f else 1f
         val boxes = (if (entry.book.visibility == VISIBLE) 1 else 0) + (if (entry.add.visibility == VISIBLE) 1 else 0)
         val room = boxes * (boxSize() + slopLeft())
-        val current = (entry.last.text as? Spanned)?.getSpans(0, entry.last.length(), Room::class.java)?.firstOrNull()
-        if (current?.width != room) {
-            // A blank as wide as the boxes ends the text: the last line stops short of them,
-            // or the blank takes a line of its own when the text leaves it no room.
-            entry.last.text = SpannableStringBuilder(entry.lastText).apply {
+        val corner = cardCorner
+        // The text keeps clear of the boxes. Bottom right: a blank as wide as them ends the
+        // text, so the last line stops short of them (or the blank takes a line of its own).
+        // Top left: such a blank begins the headline. Top right: the headline stops short of
+        // them. Bottom left: they have a row of their own under the text.
+        fun withRoom(text: CharSequence, before: Boolean, after: Boolean) = SpannableStringBuilder().apply {
+            if (before && room > 0) {
+                append("￼", Room(room), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                append(' ')
+            }
+            append(text)
+            if (after && room > 0) {
                 append(' ')
                 append("￼", Room(room), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
         }
+        val first = corner == Corner.TOP_LEFT
+        val end = corner == Corner.BOTTOM_RIGHT
+        if (entry.last === entry.headline) {
+            entry.last.text = withRoom(entry.lastText, first, end)
+        } else {
+            entry.headline.text = withRoom(entry.headlineText, first, false)
+            entry.last.text = withRoom(entry.lastText, false, end)
+        }
+        entry.headline.setPadding(0, 0, if (corner == Corner.TOP_RIGHT) room else 0, 0)
+        entry.column.setPadding(
+            0, dp(3f).toInt(), 0,
+            bottomRoom() + if (corner == Corner.BOTTOM_LEFT && boxes > 0) boxSize() + dp(2f).toInt() else 0
+        )
     }
 
     /** Space at the end of a text for what is drawn over that corner. */
@@ -284,19 +335,23 @@ class LookupPopupView(context: Context) : FrameLayout(context) {
 
     private fun bottomRoom() = dp(BOTTOM_DP * textScale / 100f).toInt()
 
-    // The button takes touches a little beyond the box it shows, up and to the left of it.
+    // The button takes touches a little beyond the box it shows, towards the middle of the popup.
     private fun slopLeft() = dp(8f).toInt()
 
     private fun slopTop() = dp(10f).toInt()
 
-    private fun box(icon: Int, description: Int, colour: Int) = ImageButton(context).apply {
+    private fun box(icon: Int, description: Int, colour: Int, corner: Corner) = ImageButton(context).apply {
         setImageResource(icon)
         imageTintList = ColorStateList.valueOf(colour)
         scaleType = ImageView.ScaleType.FIT_CENTER
         contentDescription = context.getString(description)
-        background = InsetDrawable(boxBackground(colour), slopLeft(), slopTop(), 0, 0)
+        val left = if (corner.left) 0 else slopLeft()
+        val right = if (corner.left) slopLeft() else 0
+        val top = if (corner.top) 0 else slopTop()
+        val bottom = if (corner.top) slopTop() else 0
+        background = InsetDrawable(boxBackground(colour), left, top, right, bottom)
         val inset = (boxSize() * 0.17f).toInt()
-        setPadding(slopLeft() + inset, slopTop() + inset, inset, inset)
+        setPadding(left + inset, top + inset, right + inset, bottom + inset)
     }
 
     // Filled, not see-through: a box that waits in the popup's corner has text passing under it.

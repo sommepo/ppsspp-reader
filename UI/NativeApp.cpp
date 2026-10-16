@@ -993,6 +993,11 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 		}
 	}
 
+	// Reader fork: save sync follows the memory stick when it changes.
+#ifndef READER_NO_SAVE_SYNC
+	ReaderSaveSync::Follow();
+#endif
+
 	// This can only be accessed from Windows currently, and causes linking errors with headless etc.
 	if (g_restartGraphics == 1) {
 		// Used for debugging only.

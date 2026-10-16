@@ -59,6 +59,7 @@ QString Head(const QString& path) {
 QMutex known_mutex;
 std::optional<QSet<QString>> known; // the game list is filled on a thread of its own
 std::optional<QHash<QString, QString>> audio_said;
+std::optional<QHash<QString, QString>> touch_said;
 
 QSet<QString> KnownIds() {
     QMutexLocker lock(&known_mutex);
@@ -129,10 +130,29 @@ QString Games::AudioOf(const QString& title_id) {
     return said.value(title_id.toUpper());
 }
 
+QString Games::TouchOf(const QString& title_id) {
+    {
+        QMutexLocker lock(&known_mutex);
+        if (touch_said) {
+            return touch_said->value(title_id.toUpper());
+        }
+    }
+    QHash<QString, QString> said;
+    for (const ReaderApp::ProfileInfo& game : Supported()) {
+        if (!game.touch.isEmpty()) {
+            said.insert(game.title_id.toUpper(), game.touch);
+        }
+    }
+    QMutexLocker lock(&known_mutex);
+    touch_said = said;
+    return said.value(title_id.toUpper());
+}
+
 void Games::Forget() {
     QMutexLocker lock(&known_mutex);
     known.reset();
     audio_said.reset();
+    touch_said.reset();
 }
 
 QPixmap Games::Badged(const QPixmap& picture, const QString& game_id) {

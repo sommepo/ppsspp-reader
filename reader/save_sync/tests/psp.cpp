@@ -6,8 +6,10 @@
 // are skipped without one (tools/reader/test-savesync.sh starts it).
 
 #include <cstdlib>
+#include <memory>
 #include <mutex>
 #include <random>
+#include <set>
 #include <catch2/catch_test_macros.hpp>
 #include "reader/save_sync/host.h"
 #include "reader/save_sync/tests/test_util.h"
@@ -60,6 +62,173 @@ struct Install {
 
     std::string name;
     Scratch scratch;
+    std::mutex mutex;
+    std::vector<std::string> said;
+};
+
+/// What Android's file picker gives for a memory stick's SAVEDATA: no path of this system's.
+constexpr const char* TreeSavedata =
+    "content://com.android.externalstorage.documents/tree/primary%3AReader%20Games%2FPSP/"
+    "document/primary%3AReader%20Games%2FPSP%2FPSP%2FSAVEDATA";
+
+/// A memory stick that is a document tree, as save sync reaches it: through a Store, here
+/// kept in memory, so that any use of the file system for it would find nothing.
+struct DocumentTree {
+    std::mutex mutex;
+    std::set<std::string> folders;
+    std::map<std::string, std::string> files;
+    bool fail_list = false;
+    bool fail_write = false;
+    bool fail_rename = false;
+
+    static std::string Parent(const std::string& path) {
+        const size_t slash = path.rfind('/');
+        return slash == std::string::npos ? std::string{} : path.substr(0, slash);
+    }
+    bool IsFolder(const std::string& path) const {
+        return path.empty() || folders.contains(path);
+    }
+    static bool Within(const std::string& path, const std::string& folder) {
+        return path == folder || path.starts_with(folder + "/");
+    }
+
+    void Put(const std::string& path, const std::string& content) {
+        std::scoped_lock lock{mutex};
+        for (std::string folder = Parent(path); !folder.empty(); folder = Parent(folder)) {
+            folders.insert(folder);
+        }
+        files[path] = content;
+    }
+    void Drop(const std::string& folder) {
+        std::scoped_lock lock{mutex};
+        std::erase_if(folders, [&](const std::string& f) { return Within(f, folder); });
+        std::erase_if(files, [&](const auto& f) { return Within(f.first, folder); });
+    }
+    std::map<std::string, std::string> Files() {
+        std::scoped_lock lock{mutex};
+        return files;
+    }
+    std::set<std::string> Folders() {
+        std::scoped_lock lock{mutex};
+        return folders;
+    }
+
+    static Host::Store StoreOf(const std::shared_ptr<DocumentTree>& tree) {
+        Host::Store store;
+        store.list = [tree](const std::string& path, std::vector<Host::Store::Entry>& out) {
+            std::scoped_lock lock{tree->mutex};
+            if (tree->fail_list || !tree->IsFolder(path)) {
+                return false;
+            }
+            out.clear();
+            for (const std::string& folder : tree->folders) {
+                if (Parent(folder) == path) {
+                    out.push_back({folder.substr(path.empty() ? 0 : path.size() + 1), true, 0});
+                }
+            }
+            for (const auto& [file, content] : tree->files) {
+                if (Parent(file) == path) {
+                    out.push_back(
+                        {file.substr(path.empty() ? 0 : path.size() + 1), false, 1700000000000});
+                }
+            }
+            return true;
+        };
+        store.read = [tree](const std::string& path, std::string& content) {
+            std::scoped_lock lock{tree->mutex};
+            const auto found = tree->files.find(path);
+            if (tree->fail_list || found == tree->files.end()) {
+                return false;
+            }
+            content = found->second;
+            return true;
+        };
+        store.write = [tree](const std::string& path, std::string_view content) {
+            std::scoped_lock lock{tree->mutex};
+            if (tree->fail_write || !tree->IsFolder(Parent(path))) {
+                return false;
+            }
+            tree->files[path] = std::string{content};
+            return true;
+        };
+        store.make_folder = [tree](const std::string& path) {
+            std::scoped_lock lock{tree->mutex};
+            if (tree->fail_write || !tree->IsFolder(Parent(path))) {
+                return false;
+            }
+            tree->folders.insert(path);
+            return true;
+        };
+        store.remove = [tree](const std::string& path) {
+            std::scoped_lock lock{tree->mutex};
+            std::erase_if(tree->folders, [&](const std::string& f) { return Within(f, path); });
+            std::erase_if(tree->files, [&](const auto& f) { return Within(f.first, path); });
+            return true;
+        };
+        store.rename = [tree](const std::string& path, const std::string& name) {
+            std::scoped_lock lock{tree->mutex};
+            if (tree->fail_rename || !tree->folders.contains(path) || tree->IsFolder(name) ||
+                tree->files.contains(name) || name.find('/') != std::string::npos) {
+                return false;
+            }
+            const auto moved = [&](const std::string& p) { return name + p.substr(path.size()); };
+            std::set<std::string> folders;
+            for (const std::string& f : tree->folders) {
+                folders.insert(Within(f, path) ? moved(f) : f);
+            }
+            std::map<std::string, std::string> files;
+            for (const auto& [f, content] : tree->files) {
+                files[Within(f, path) ? moved(f) : f] = content;
+            }
+            tree->folders = std::move(folders);
+            tree->files = std::move(files);
+            return true;
+        };
+        return store;
+    }
+};
+
+/// An install whose memory stick is a document tree (the Fold's).
+struct TreeInstall {
+    explicit TreeInstall(std::string name_) : name{std::move(name_)} {}
+
+    void Start(bool enabled = true) {
+        Host::Start(TreeSavedata, (scratch.path / "sync").string(),
+                    [this](const std::string& text) {
+                        std::scoped_lock lock{mutex};
+                        said.push_back(text);
+                    },
+                    name, DocumentTree::StoreOf(tree));
+        Host::Settings settings = Host::Get();
+        settings.enabled = enabled;
+        settings.addresses = Env("SAVESYNC_TEST_ADDRESS");
+        settings.code = Env("SAVESYNC_TEST_CODE");
+        Host::Set(settings);
+    }
+    void Save(const std::string& folder, const std::string& content) {
+        tree->Put(folder + "/DATA.BIN", content);
+        Host::NoteSaved();
+    }
+    [[nodiscard]] std::map<std::string, std::string> Saves() const {
+        return tree->Files();
+    }
+    /// Folders save sync leaves on the memory stick while it replaces a save.
+    [[nodiscard]] bool LeftOvers() const {
+        for (const std::string& folder : tree->Folders()) {
+            if (folder.find(".savesync") != std::string::npos) {
+                return true;
+            }
+        }
+        return false;
+    }
+    [[nodiscard]] std::vector<std::string> Said() {
+        std::scoped_lock lock{mutex};
+        return said;
+    }
+
+    std::string name;
+    Scratch scratch;
+    std::shared_ptr<DocumentTree> tree = std::make_shared<DocumentTree>();
     std::mutex mutex;
     std::vector<std::string> said;
 };
@@ -332,4 +501,190 @@ TEST_CASE("What the background did names its game", "[savesync][psp]") {
     REQUIRE(Host::Wait(10000));
     CHECK(thor.Said().back() == "Save sync: this device's save was sent. (A made-up game)");
     Host::Shutdown();
+}
+
+TEST_CASE("A memory stick that only Android's file picker reaches: saves go up and come back",
+          "[savesync][psp][tree]") {
+    NEEDS_SERVICE();
+    const std::string disc = NewDisc();
+    Install thor{"Thor"};
+    TreeInstall fold{"Fold"};
+
+    thor.Start();
+    thor.Save(disc + "DATA00", "chapter 1");
+    thor.Save(disc + "SYS", "settings");
+    Host::GameStarting(disc, "A made-up game");
+    Host::GameStopped();
+    REQUIRE(Host::Wait(10000));
+    Host::Shutdown();
+
+    // The other device's save is fetched before the game runs, onto the memory stick.
+    fold.tree->Put("ULJS99999/DATA.BIN", "another game's");
+    fold.Start();
+    REQUIRE(Host::Wait(10000));
+    CHECK(Host::Staged());
+    Host::GameStarting(disc, "A made-up game");
+    CHECK(fold.Saves() == std::map<std::string, std::string>{
+                              {disc + "DATA00/DATA.BIN", "chapter 1"},
+                              {disc + "SYS/DATA.BIN", "settings"},
+                              {"ULJS99999/DATA.BIN", "another game's"}});
+    CHECK_FALSE(fold.LeftOvers());
+    // What the game writes there goes up: a new folder, a folder deleted.
+    fold.Save(disc + "DATA01", "chapter 2");
+    fold.tree->Drop(disc + "DATA00");
+    REQUIRE(Host::Wait(10000));
+    Host::GameStopped();
+    REQUIRE(Host::Wait(10000));
+    Host::Shutdown();
+
+    thor.Start();
+    Host::GameStarting(disc, "A made-up game");
+    CHECK(thor.Saves() == std::map<std::string, std::string>{
+                              {disc + "DATA01/DATA.BIN", "chapter 2"},
+                              {disc + "SYS/DATA.BIN", "settings"}});
+    thor.Save(disc + "DATA01", "chapter 3");
+    thor.Save(disc + "DATA02", "chapter 3, the other slot");
+    REQUIRE(Host::Wait(10000));
+    Host::GameStopped();
+    REQUIRE(Host::Wait(10000));
+    Host::Shutdown();
+
+    // A save that replaces one on the memory stick: the old one is in the backups.
+    fold.Start();
+    Host::GameStarting(disc, "A made-up game");
+    CHECK(fold.Saves() == std::map<std::string, std::string>{
+                              {disc + "DATA01/DATA.BIN", "chapter 3"},
+                              {disc + "DATA02/DATA.BIN", "chapter 3, the other slot"},
+                              {disc + "SYS/DATA.BIN", "settings"},
+                              {"ULJS99999/DATA.BIN", "another game's"}});
+    CHECK_FALSE(fold.LeftOvers());
+    const auto backups = Tree(fold.scratch.path / "sync" / "backups" / Host::TitleOf(disc));
+    CHECK(backups.size() == 2);
+    // Nothing for the other game was fetched, and nothing touched the file system's idea of
+    // the document tree's address.
+    CHECK_FALSE(std::filesystem::exists("content:"));
+    Host::GameStopped();
+    Host::Shutdown();
+}
+
+TEST_CASE("A memory stick that cannot be read or written keeps its save",
+          "[savesync][psp][tree]") {
+    NEEDS_SERVICE();
+    const std::string disc = NewDisc();
+    Install thor{"Thor"};
+    TreeInstall fold{"Fold"};
+
+    thor.Start();
+    thor.Save(disc, "chapter 1");
+    Host::GameStarting(disc, "A made-up game");
+    Host::GameStopped();
+    REQUIRE(Host::Wait(10000));
+    Host::Shutdown();
+
+    // Unreadable (the app lost its access): it is not taken for a memory stick without a save.
+    fold.tree->Put(disc + "/DATA.BIN", "the Fold's own");
+    fold.tree->fail_list = true;
+    fold.Start();
+    REQUIRE(Host::Wait(10000));
+    Host::GameStarting(disc, "A made-up game");
+    REQUIRE_FALSE(fold.Said().empty());
+    CHECK(fold.Said().back().find("could not be read") != std::string::npos);
+    fold.tree->fail_list = false;
+    CHECK(fold.Saves() == std::map<std::string, std::string>{{disc + "/DATA.BIN", "the Fold's own"}});
+    Host::GameStopped();
+    Host::Shutdown();
+    fold.tree->Drop(disc);
+
+    // Not writable: the fetch fails and leaves nothing behind; the next start takes it.
+    fold.tree->fail_write = true;
+    fold.Start();
+    Host::GameStarting(disc, "A made-up game");
+    CHECK(fold.Saves().empty());
+    CHECK_FALSE(fold.LeftOvers());
+    CHECK(Host::Status().find("memory stick") != std::string::npos);
+    Host::GameStopped();
+    REQUIRE(Host::Wait(10000));
+    fold.tree->fail_write = false;
+    Host::GameStarting(disc, "A made-up game");
+    CHECK(fold.Saves() == std::map<std::string, std::string>{{disc + "/DATA.BIN", "chapter 1"}});
+    Host::GameStopped();
+    REQUIRE(Host::Wait(10000));
+    Host::Shutdown();
+
+    // The old save cannot be moved aside: it stays as it was.
+    thor.Start();
+    Host::GameStarting(disc, "A made-up game");
+    thor.Save(disc, "chapter 2");
+    Host::GameStopped();
+    REQUIRE(Host::Wait(10000));
+    Host::Shutdown();
+    fold.tree->fail_rename = true;
+    fold.Start();
+    Host::GameStarting(disc, "A made-up game");
+    CHECK(fold.Saves() == std::map<std::string, std::string>{{disc + "/DATA.BIN", "chapter 1"}});
+    CHECK_FALSE(fold.LeftOvers());
+    Host::GameStopped();
+    REQUIRE(Host::Wait(10000));
+    fold.tree->fail_rename = false;
+    Host::GameStarting(disc, "A made-up game");
+    CHECK(fold.Saves() == std::map<std::string, std::string>{{disc + "/DATA.BIN", "chapter 2"}});
+    Host::GameStopped();
+    Host::Shutdown();
+}
+
+TEST_CASE("Started again for another memory stick, save sync uses only that one",
+          "[savesync][psp][tree]") {
+    NEEDS_SERVICE();
+    const std::string disc = NewDisc();
+    Install thor{"Thor"};
+    thor.Start();
+    thor.Save(disc, "chapter 1");
+    Host::GameStarting(disc, "A made-up game");
+    Host::GameStopped();
+    REQUIRE(Host::Wait(10000));
+    Host::Shutdown();
+
+    // The app's own folder first, then a folder chosen with the file picker while it runs.
+    Install before{"Fold"};
+    TreeInstall fold{"Fold"};
+    before.Start();
+    REQUIRE(Host::Wait(10000));
+    fold.Start();
+    CHECK(Host::Staged());
+    Host::GameStarting(disc, "A made-up game");
+    CHECK(fold.Saves() == std::map<std::string, std::string>{{disc + "/DATA.BIN", "chapter 1"}});
+    CHECK(before.Saves().empty());
+    Host::GameStopped();
+    Host::Shutdown();
+}
+
+TEST_CASE("The settings come along to a new memory stick", "[savesync][psp][tree]") {
+    Install old_stick{"Fold"};
+    TreeInstall fold{"Fold"};
+    const std::string old_data = (old_stick.scratch.path / "sync").string();
+    Host::Start((old_stick.scratch.path / "SAVEDATA").string(), old_data, {}, "Fold");
+    Host::Settings settings;
+    settings.enabled = true;
+    settings.addresses = "127.0.0.1:1";
+    settings.code = "AAAA-BBBB-CCCC";
+    settings.device = "My Fold";
+    Host::Set(settings);
+
+    const std::string data = (fold.scratch.path / "sync").string();
+    Host::Start(TreeSavedata, data, {}, "Another name", DocumentTree::StoreOf(fold.tree),
+                {(fold.scratch.path / "nothing here").string(), old_data});
+    CHECK(Host::DataFolder() == data);
+    Host::Settings kept = Host::Get();
+    CHECK(kept.enabled);
+    CHECK(kept.addresses == "127.0.0.1:1");
+    CHECK(kept.code == "AAAA-BBBB-CCCC");
+    CHECK(kept.device == "My Fold");
+    // Kept in the new folder: changed there, the old memory stick's do not come back.
+    kept.device = "The Fold";
+    Host::Set(kept);
+    Host::Shutdown();
+    Host::Start(TreeSavedata, data, {}, "Another name", DocumentTree::StoreOf(fold.tree), {old_data});
+    CHECK(Host::Get().device == "The Fold");
+    Host::Shutdown();
+    CHECK(Host::DataFolder().empty());
 }

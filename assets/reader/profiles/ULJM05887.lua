@@ -1,6 +1,8 @@
 -- reader: no hooks
 -- reader: title STEINS;GATE (PSP)
 -- reader: reads The message window with speakers and furigana, and the phone's mails
+-- reader: touch press
+-- reader: buttons up down left right circle cross square triangle
 -- reader: version ULJM-05887
 -- STEINS;GATE (5pb./Nitroplus, PSP, 2011), ULJM-05887. EBOOT.BIN ABD66EFB.
 --

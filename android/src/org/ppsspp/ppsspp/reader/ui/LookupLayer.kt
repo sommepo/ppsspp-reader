@@ -195,6 +195,13 @@ class LookupLayer(context: Context, private val onOpenDictionaries: () -> Unit) 
     fun popupContains(x: Float, y: Float): Boolean =
         isOpen && x >= popup.left && x < popup.right && y >= popup.top && y < popup.bottom
 
+    /** The open popup's place in this layer, or null while none is open. */
+    fun popupArea(): Area? =
+        if (isOpen) Area(popup.left.toFloat(), popup.top.toFloat(), popup.right.toFloat(), popup.bottom.toFloat()) else null
+
+    /** Counts the popups shown: a new number is a new popup. */
+    val shownCount get() = token
+
     init {
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         scrim.visibility = GONE
@@ -376,6 +383,7 @@ class LookupLayer(context: Context, private val onOpenDictionaries: () -> Unit) 
                 wordRange = offset..offset
                 notes.clear()
                 popup.textScale = settings.popupScale
+                popup.cardCorner = LookupPopupView.Corner.of(settings.cardCorner)
                 when {
                     !hasDictionaries ->
                         popup.showMessage(context.getString(R.string.reader_lookup_no_dictionaries), true)

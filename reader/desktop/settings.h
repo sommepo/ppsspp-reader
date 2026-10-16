@@ -32,6 +32,15 @@ public:
     [[nodiscard]] bool ScreenText() const;
     /// Draw the outlines of what can be clicked, to check that they sit on the text.
     [[nodiscard]] bool ScreenTextOutline() const;
+    /// Playing by touch or click alone, for a game whose profile says how ("-- reader: touch"):
+    /// a click beside the text goes on, a click on an answer of a choice picks it.
+    [[nodiscard]] bool TouchPlay() const;
+    /// How the word being looked up is marked in the game's picture: "outline" (a frame
+    /// around it; the first value), "highlight" (a coloured box over it) or "none".
+    [[nodiscard]] QString WordMark() const;
+    /// The corner of each headword's part of the popup where its card buttons stand:
+    /// "bottom_left" (the first value), "bottom_right", "top_left" or "top_right".
+    [[nodiscard]] QString CardCorner() const;
     /// Text size of the dictionary popup, in percent.
     [[nodiscard]] int PopupScale() const;
     /// How tall the dictionary popup may get, in percent of the picture's height.
@@ -185,6 +194,9 @@ public:
     static const QString KeySaveSyncDevice;
     static const QString KeyScreenText;
     static const QString KeyScreenTextOutline;
+    static const QString KeyTouchPlay;
+    static const QString KeyWordMark;
+    static const QString KeyCardCorner;
     static const QString KeyPopupScale;
     static const QString KeyPopupHeight;
     static const QString KeyPopupAutoHide;

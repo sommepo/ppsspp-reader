@@ -1044,6 +1044,8 @@ void ReaderSettingsDialog(QWidget* parent) {
     QFormLayout* text = section(Tr("Looking words up"));
     check(text, Tr("Click words in the game's own text"), Settings::KeyScreenText,
           settings.ScreenText());
+    check(text, Tr("Play by touch: beside the text goes on, an answer is picked"),
+          Settings::KeyTouchPlay, settings.TouchPlay());
     choice(text, Tr("By pointing at a word"), Settings::KeyHoverLookup,
            {{Tr("Off"), QStringLiteral("off")},
             {Tr("While Shift is held"), QStringLiteral("shift")},
@@ -1057,6 +1059,17 @@ void ReaderSettingsDialog(QWidget* parent) {
          settings.PopupAutoHideSeconds(), 0, 120, Tr(" s left alone (0: it stays)"));
     check(text, Tr("Close the popup when the pointer leaves its word and the popup"),
           Settings::KeyPopupHideOnExit, settings.PopupHideOnExit());
+    choice(text, Tr("Where the add button stands"), Settings::KeyCardCorner,
+           {{Tr("Bottom left"), QStringLiteral("bottom_left")},
+            {Tr("Bottom right"), QStringLiteral("bottom_right")},
+            {Tr("Top left"), QStringLiteral("top_left")},
+            {Tr("Top right"), QStringLiteral("top_right")}},
+           settings.CardCorner());
+    choice(text, Tr("Mark the word looked up"), Settings::KeyWordMark,
+           {{Tr("Outline"), QStringLiteral("outline")},
+            {Tr("Highlight"), QStringLiteral("highlight")},
+            {Tr("Not at all"), QStringLiteral("none")}},
+           settings.WordMark());
     check(text, Tr("Outline what can be clicked"), Settings::KeyScreenTextOutline,
           settings.ScreenTextOutline());
 

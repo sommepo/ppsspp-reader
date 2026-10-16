@@ -323,7 +323,11 @@ Result Engine::Fetch(const Setup& setup, const Game& game, const Version& head) 
         for (int again = 2; std::filesystem::exists(backup); ++again) {
             backup = backups / (Formatted(NowMs(), "%Y%m%d-%H%M%S") + "-" + std::to_string(again));
         }
-        Unpack(zip, HereFor(game, zip), backup);
+        const std::vector<Folder> placed = HereFor(game, zip);
+        Unpack(zip, placed, backup);
+        if (game.unpacked) {
+            game.unpacked(placed);
+        }
         PruneBackups(backups, BackupsKept);
     } catch (const ArchiveError& error) {
         return Make(Result::Kind::Failed, game, std::string{"Save sync: "} + error.what() + ".");

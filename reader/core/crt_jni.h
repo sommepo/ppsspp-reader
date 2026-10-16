@@ -6,6 +6,7 @@
 #include <jni.h>
 #include <string>
 #include "reader/core/crt.h"
+#include "reader/core/crt_frame.h"
 
 /**
  * The CRT picture for the Android apps: what the Kotlin settings page (reader/ui/
@@ -13,6 +14,9 @@
  * every fork; a fork's own bridge file names its Java package once:
  *
  *     READER_CRT_JNI(org_example_app)   // for the class org.example.app.reader.ui.CrtNative
+ *
+ * An app that does not draw the tube's frame (ui/CrtFrameView) defines READER_CRT_NO_FRAME
+ * before including this, and the settings page then leaves the frame's rows out.
  */
 namespace Reader::Crt::Jni {
 
@@ -22,6 +26,11 @@ namespace Reader::Crt::Jni {
 inline std::string Table() {
     std::string text;
     for (const Param& param : Params()) {
+#ifdef READER_CRT_NO_FRAME
+        if (param.frame) {
+            continue; // this app draws no frame (READER_CRT_NO_FRAME before this header)
+        }
+#endif
         const char* kind = param.kind == Kind::Toggle ? "toggle"
                            : param.kind == Kind::Choice ? "choice" : "slider";
         text += param.key;
@@ -89,5 +98,25 @@ inline std::string Text(JNIEnv* env, jstring text) {
     JNIEXPORT jstring JNICALL Java_##package##_reader_ui_CrtNative_currentLook(JNIEnv* env,        \
                                                                                jobject) {          \
         return env->NewStringUTF(Reader::Crt::CurrentPreset().c_str());                            \
+    }                                                                                              \
+    JNIEXPORT jint JNICALL Java_##package##_reader_ui_CrtNative_revision(JNIEnv*, jobject) {      \
+        return static_cast<jint>(Reader::Crt::Revision());                                         \
+    }                                                                                              \
+    JNIEXPORT jintArray JNICALL Java_##package##_reader_ui_CrtNative_frame(                        \
+        JNIEnv* env, jobject, jint width, jint height, jfloat left, jfloat top, jfloat pw, jfloat ph) { \
+        if (!Reader::Crt::Frame::Wanted()) {                                                       \
+            return nullptr;                                                                        \
+        }                                                                                          \
+        const std::vector<std::uint32_t> pixels =                                                  \
+            Reader::Crt::Frame::Draw(width, height, left, top, pw, ph, false);                     \
+        if (pixels.empty()) {                                                                      \
+            return nullptr;                                                                        \
+        }                                                                                          \
+        jintArray out = env->NewIntArray(static_cast<jsize>(pixels.size()));                       \
+        if (out != nullptr) {                                                                      \
+            env->SetIntArrayRegion(out, 0, static_cast<jsize>(pixels.size()),                      \
+                                   reinterpret_cast<const jint*>(pixels.data()));                  \
+        }                                                                                          \
+        return out;                                                                                \
     }                                                                                              \
     }

@@ -42,6 +42,11 @@ public:
     void SetTextScale(int percent);
     /// Keep offering the plus beside the book for a word Anki already has.
     void SetAllowDuplicates(bool allow);
+    /// The corner of each headword's part where its boxes stand.
+    enum class Corner { BottomLeft, BottomRight, TopLeft, TopRight };
+    void SetCardCorner(Corner corner);
+    /// From the setting's value ("bottom_left" and so on); the bottom left otherwise.
+    [[nodiscard]] static Corner CornerOf(const QString& value);
 
     void ShowResults(const QList<ReaderApp::LookupResult>& results);
     void ShowMessage(const QString& message, bool offer_dictionaries);
@@ -92,6 +97,8 @@ private:
         /// In content coordinates (before scrolling).
         int top{};
         int height{};
+        /// Where its text begins, below its top.
+        int text_top{};
         QRect add_box;
         QRect book_box;
         bool is_result{};
@@ -113,6 +120,7 @@ private:
     std::vector<Entry> entries;
     int text_scale{100};
     bool allow_duplicates{};
+    Corner card_corner{Corner::BottomLeft};
     int content_width{};
     int content_height{};
     int scroll{};

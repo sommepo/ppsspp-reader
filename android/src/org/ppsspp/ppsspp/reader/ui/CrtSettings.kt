@@ -38,6 +38,16 @@ object CrtNative {
 
     /** The look the values are those of, or "" when they are the user's own. */
     external fun currentLook(): String
+
+    /** A number that changes whenever a value does: the frame is drawn again then. */
+    external fun revision(): Int
+
+    /**
+     * The tube's frame (reader/core/crt_frame.h) for a screen of [width] by [height] pixels
+     * around the picture at [left], [top], [pictureWidth] by [pictureHeight]: colours for
+     * Bitmap.createBitmap, or null when no frame is wanted (the CRT picture off, or "None").
+     */
+    external fun frame(width: Int, height: Int, left: Float, top: Float, pictureWidth: Float, pictureHeight: Float): IntArray?
 }
 
 /**

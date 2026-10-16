@@ -17,9 +17,12 @@ class TextView;
 
 namespace ReaderSaveSync {
 
-/// With the app: reads the settings and brings the saves in line. Nothing happens where the
-/// memory stick is not a plain folder (Android's document trees).
+/// With the app: reads the settings and brings the saves in line. A memory stick that is a
+/// folder chosen with Android's file picker (a document tree) is reached through the
+/// emulator's own file calls.
 void Start();
+/// Each frame: when the memory stick changed, save sync is ended and started again for it.
+void Follow();
 void Shutdown();
 
 class Screen : public UISimpleBaseDialogScreen {

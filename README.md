@@ -24,10 +24,22 @@ One of four [reader emulators](https://github.com/sommepo/readers) for PS2, PSP 
 - **Look up words in the game's text.** On a computer, point at a word. On Android, move the
   cursor onto it with the controller or, on a two-screen handheld, the lower screen as a
   trackpad. Clicking or touching a word works too. Uses Yomitan dictionaries.
+- **The word is outlined, and the outline glides** from word to word as you move along the
+  line. Highlight or no mark at all instead, in Reader settings.
+- **The popup stands right next to the word** and stays put while you go to its **+**, which
+  sits in the bottom left of each entry (or any corner you choose).
 - **Anki cards** with the sentence and a picture of the scene.
 - **Backlog and reading statistics.**
 - **The PSP's own XMB** as the main screen.
-- **CRT picture** (optional, in Reader settings).
+- **CRT picture** with a tube's frame around it (Reader settings).
+- **Play by touch** on a phone: a tap on the picture goes on, a tap on an answer picks it, and
+  the controller's buttons stand in a small column at the right edge that a tab tucks away. On
+  at first only on a device without controls of its own.
+- **Two-screen handhelds** (AYN Thor): the lower screen is a trackpad for the cursor, and the
+  controller stays the game's.
+- **Only the games that can be read are listed** at first (all of them, in a setting).
+- **A Steam Controller's back buttons** are the reader's: pause the game to look words up,
+  pause the statistics, make a card, open the backlog.
 
 <table>
   <tr>

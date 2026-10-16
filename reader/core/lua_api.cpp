@@ -212,6 +212,23 @@ int ReaderHook(lua_State* L) {
     return 0;
 }
 
+/// reader.cursor(index [, "horizontal"]): which answer of the choice on screen the game's cursor
+/// is on, from 0 (-1 while it is on none yet); reader.cursor(nil) once there is no choice.
+int ReaderCursor(lua_State* L) {
+    if (lua_isnoneornil(L, 1)) {
+        GetEngine(L).SetCursor(std::nullopt);
+        return 0;
+    }
+    const lua_Integer index = luaL_checkinteger(L, 1);
+    luaL_argcheck(L, index >= -1 && index < 64, 1, "an answer from 0, or -1 for none");
+    const char* axis = luaL_optstring(L, 2, "vertical");
+    const std::string_view way{axis};
+    luaL_argcheck(L, way == "vertical" || way == "horizontal", 2,
+                  "\"vertical\" or \"horizontal\"");
+    GetEngine(L).SetCursor(Engine::AnswerCursor{static_cast<int>(index), way == "horizontal"});
+    return 0;
+}
+
 int ReaderOnFrame(lua_State* L) {
     luaL_checktype(L, 1, LUA_TFUNCTION);
     lua_pushvalue(L, 1);
@@ -619,6 +636,7 @@ const luaL_Reg ReaderFunctions[] = {
     {"emit", ReaderEmit},   {"log", ReaderLog},          {"warn", ReaderWarn},
     {"frame", ReaderFrame}, {"data", ReaderData},        {"layout", ReaderLayout},
     {"picture", ReaderPicture}, {"on_state_loaded", ReaderOnStateLoaded},
+    {"cursor", ReaderCursor},
     {nullptr, nullptr},
 };
 

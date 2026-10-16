@@ -71,6 +71,9 @@ class ScreenTextOverlayTest {
     private lateinit var overlay: ReaderOverlay
     private lateinit var layer: ScreenTextLayer
     private var gameTaps = 0
+    private var goneOn = 0
+    private val picked = mutableListOf<Int>()
+    private var canPick = true
 
     private val host = object : ReaderOverlay.Host {
         override fun openBacklog() {}
@@ -80,6 +83,13 @@ class ScreenTextOverlayTest {
         override fun openAnkiSetup() {}
         override fun chooseCardAudio() {}
         override fun hasSecondaryScreen() = false
+        override fun goOn() {
+            goneOn++
+        }
+        override fun pickAnswer(answer: Int): Boolean {
+            picked.add(answer)
+            return canPick
+        }
     }
 
     // The picture large on the left, a trackpad area small beside it.
@@ -155,6 +165,9 @@ class ScreenTextOverlayTest {
         // would point at files that are gone, or at that class's dictionary.
         TestSupport.resetStores()
         activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        // The tests before touch play's own are of the reader's taps alone.
+        PreferenceManager.getDefaultSharedPreferences(activity).edit()
+            .putBoolean(ReaderSettings.KEY_TOUCH_PLAY, false).commit()
         activity.setTheme(com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar)
         root = FrameLayout(activity)
         game = GamePicture(activity).apply { setOnClickListener { gameTaps++ } }
@@ -271,14 +284,22 @@ class ScreenTextOverlayTest {
         assertEquals(scaleX(152f), mark.right, 0.5f)
         assertEquals(scaleY(191f), mark.top, 0.5f)
         assertEquals(scaleY(212f), mark.bottom, 0.5f)
+        // However the mark is drawn, it is the same mark: a frame, or nothing at all.
+        layer.markStyle = ReaderSettings.WORD_MARK_OUTLINE
+        TestSupport.snapshot(root, 1920, 1080, "screen-text-lookup-outline")
+        layer.markStyle = ReaderSettings.WORD_MARK_NONE
+        TestSupport.snapshot(root, 1920, 1080, "screen-text-lookup-unmarked")
+        assertEquals(mark, layer.marks.single())
+        layer.markStyle = ReaderSettings.WORD_MARK_HIGHLIGHT
 
-        // The popup is on screen and clear of the game's text box.
-        val box = layer.texts.single().box
+        // The popup is on screen, right next to the word: just above or just below its row.
         assertTrue("popup on screen", popup.top >= 0 && popup.bottom <= 1080)
-        assertTrue(
-            "popup (${popup.top} to ${popup.bottom}) keeps off the text box (${box.top} to ${box.bottom})",
-            popup.bottom <= box.top || popup.top >= box.bottom
-        )
+
+        val nextTo = (popup.bottom <= mark.top && mark.top - popup.bottom < 40) ||
+
+            (popup.top >= mark.bottom && popup.top - mark.bottom < 40)
+
+        assertTrue("popup (${popup.top} to ${popup.bottom}) is next to the word (${mark.top} to ${mark.bottom})", nextTo)
         assertEquals("the panel stays away", View.GONE, panel().visibility)
     }
 
@@ -313,6 +334,156 @@ class ScreenTextOverlayTest {
         assertEquals(1, gameTaps)
         tap(bottomArea.left + 100f, bottomArea.top + 100f)
         assertEquals(2, gameTaps)
+    }
+
+    // ---- Touch play ----
+
+    private val answers = "はい\nいいえ\nもう一度"
+    private val choiceLine = TextLine(
+        sequence = 8, frame = 2, audioPosition = 0, channel = "choice", speaker = "",
+        text = answers, ruby = emptyList(), sourceId = "made-up-choice", meta = emptyMap(),
+        timestamp = 2, window = "choice"
+    )
+    private val choice = PresentedLine(choiceLine, LineAccounting(7, false, true, 1), 8)
+
+    /** The three answers one under the other in the middle of the picture, 16 a character. */
+    private val choiceLayout = ScreenLayout.fromJson(
+        buildString {
+            append("""{"window":"choice","seq":8,"space":[400,240],"glyphs":[""")
+            var x = 150
+            var y = 60
+            answers.forEachIndexed { i, c ->
+                if (i > 0) append(',')
+                if (c == '\n') {
+                    append("null")
+                    x = 150
+                    y += 30
+                } else {
+                    append("[$x,$y,16,21]")
+                    x += 16
+                }
+            }
+            append("]}")
+        }
+    )!!
+
+    private fun touchPlay(gameTakesTouch: Boolean = false, said: Boolean = true) {
+        layer.touchPlay = true
+        layer.touchMode = {
+            when {
+                !said -> ""
+                gameTakesTouch -> ReaderCatalog.TOUCH_GAME
+                else -> ReaderCatalog.TOUCH_PRESS
+            }
+        }
+    }
+
+    private fun showChoice() {
+        overlay.onLine(choice)
+        ReaderSession.screen.adoptLine(choice)
+        ReaderSession.screen.applyLayout(choiceLayout)
+        overlay.onScreenTextChanged()
+        layout()
+    }
+
+    private fun press(x: Float, y: Float, millis: Long) {
+        val now = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0)
+        val up = MotionEvent.obtain(now, now + millis, MotionEvent.ACTION_UP, x, y, 0)
+        root.dispatchTouchEvent(down)
+        root.dispatchTouchEvent(up)
+        down.recycle()
+        up.recycle()
+        TestSupport.idle()
+    }
+
+    /** The centre of character [index] of the choice's text. */
+    private fun answerCentre(index: Int): Pair<Float, Float> {
+        val cell = choiceLayout.cells[index]!!
+        return scaleX(cell.x + cell.width / 2) to scaleY(cell.y + cell.height / 2)
+    }
+
+    @Test
+    fun touchPlayATapOnThePictureOrBesideTheTextGoesOnAndAWordIsStillLookedUp() {
+        installDictionary()
+        touchPlay()
+        showInGame()
+        tap(scaleX(200f), scaleY(100f)) // above the box
+        assertEquals(1, goneOn)
+        assertEquals("the game gets no touch of its own", 0, gameTaps)
+        tap(scaleX(300f), scaleY(201f)) // in the box, right of the first row
+        assertEquals(2, goneOn)
+        val (x, y) = centreOf(0)
+        tap(x, y)
+        awaitPopup("今日")
+        assertEquals(2, goneOn)
+        // With the popup open a tap puts it away, and only that.
+        tap(scaleX(200f), scaleY(100f))
+        assertEquals(View.GONE, popup().visibility)
+        assertEquals(2, goneOn)
+        tap(scaleX(200f), scaleY(100f))
+        assertEquals(3, goneOn)
+    }
+
+    @Test
+    fun touchPlayATapOnAnAnswerPicksItAndAHeldFingerLooksItUp() {
+        installDictionary(""",["はい","はい","int","",5,["yes"],6,""]""")
+        touchPlay()
+        showInGame()
+        showChoice()
+        val (x1, y1) = answerCentre(0) // は of はい
+        tap(x1, y1)
+        val (x3, y3) = answerCentre(answers.indexOf('一'))
+        tap(x3, y3)
+        assertEquals(listOf(0, 2), picked)
+        assertEquals(0, goneOn)
+        assertEquals(0, gameTaps)
+        // Beside the answers a tap would confirm whatever is lit: it does nothing.
+        tap(scaleX(200f), scaleY(20f))
+        tap(scaleX(10f), scaleY(150f))
+        assertEquals(0, goneOn)
+        assertEquals(0, gameTaps)
+        // Held: the word.
+        press(x1, y1, 800)
+        awaitPopup("はい")
+        assertEquals(listOf(0, 2), picked)
+        // A game whose profile does not know the cursor: the player is told.
+        tap(scaleX(10f), scaleY(150f)) // closes the popup (away from where it stands)
+        assertEquals(View.GONE, popup().visibility)
+        assertEquals(listOf(0, 2), picked)
+        canPick = false
+        val (x2, y2) = answerCentre(answers.indexOf('い', 3))
+        tap(x2, y2)
+        assertEquals(listOf(0, 2, 1), picked)
+        assertTrue(ShadowToast.getTextOfLatestToast().toString().contains("controller"))
+    }
+
+    @Test
+    fun touchPlayAGameMadeForTouchGetsTheTapsOnItsPictureAndAnswers() {
+        touchPlay(gameTakesTouch = true)
+        showInGame()
+        showChoice()
+        tap(scaleX(200f), scaleY(20f))
+        assertEquals(1, gameTaps)
+        val (x, y) = answerCentre(0)
+        tap(x, y)
+        assertEquals(2, gameTaps)
+        assertEquals(0, goneOn)
+        assertTrue(picked.isEmpty())
+        // Its text box stays the reader's.
+        tap(scaleX(300f), scaleY(201f))
+        assertEquals(2, gameTaps)
+    }
+
+    @Test
+    fun touchPlayIsNotForAGameWhoseProfileSaysNothingOfItOrWithTheSettingOff() {
+        showInGame()
+        tap(scaleX(200f), scaleY(100f))
+        assertEquals(1, gameTaps)
+        touchPlay(said = false)
+        tap(scaleX(200f), scaleY(100f))
+        assertEquals(2, gameTaps)
+        assertEquals(0, goneOn)
     }
 
     @Test
@@ -461,6 +632,7 @@ class ScreenTextOverlayTest {
 
     @Test
     fun thePlusSitsInABoxAtTheBottomRightOfThePopupAndMakesACard() {
+        boxesBottomRight()
         val stub = useAnki()
         installDictionary()
         showInGame()
@@ -514,6 +686,7 @@ class ScreenTextOverlayTest {
 
     @Test
     fun aWordAnkiAlreadyHasShowsAnOpenBookInstead() {
+        boxesBottomRight()
         val stub = useAnki()
         stub.find = { query -> if (query.contains("天気")) listOf(11L, 12L) else emptyList() }
         installDictionary()
@@ -545,6 +718,7 @@ class ScreenTextOverlayTest {
 
     @Test
     fun withDuplicatesAllowedThePlusStaysBesideTheBook() {
+        boxesBottomRight()
         val stub = useAnki(allowDuplicates = true)
         stub.find = { listOf(11L) }
         installDictionary()
@@ -622,6 +796,7 @@ class ScreenTextOverlayTest {
 
     @Test
     fun thePopupStaysShortAndTheBoxOfALongEntryWaitsInItsCorner() {
+        boxesBottomRight()
         // 良い with a dozen senses more: far more than a short popup shows at once.
         installDictionary(
             (2..13).joinToString("") { n -> """,["良い","よい","adj-i","adj-i",6,["sense number $n"],5,""]""" }
@@ -1085,5 +1260,11 @@ class ScreenTextOverlayTest {
         dialog = open()
         assertEquals("As set for this game (Never add it)", dialog.listView.adapter.getItem(0).toString())
         assertEquals(0, dialog.listView.checkedItemPosition)
+    }
+
+    /** The boxes where they stood before their corner could be chosen (the bottom left now). */
+    private fun boxesBottomRight() {
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(activity).edit()
+            .putString(ReaderSettings.KEY_CARD_CORNER, "bottom_right").commit()
     }
 }

@@ -3,15 +3,16 @@
 
 package org.ppsspp.ppsspp.reader.ui
 
+import org.ppsspp.ppsspp.reader.ReaderSettings
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.RectF
 import android.text.Spannable
 import android.text.SpannableStringBuilder
 import android.text.Spanned
-import android.text.style.BackgroundColorSpan
 import android.text.style.LineHeightSpan
 import android.text.style.ReplacementSpan
 import android.util.AttributeSet
@@ -46,7 +47,20 @@ class ReaderTextView @JvmOverloads constructor(
     private var plainText: String = ""
     private var rubySpans: List<RubySpan> = emptyList()
     private var furigana = true
-    private var highlight: BackgroundColorSpan? = null
+    /** The looked-up word's range in the line, or null. */
+    var markedRange: IntRange? = null
+        private set
+    private val framePath = android.graphics.Path()
+    private val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeJoin = Paint.Join.ROUND
+    }
+    private val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+    /** The mark as drawn, on its way to the word's rows; and the rows it was last sent to. */
+    private val glide = MarkGlide(this)
+    private var markTargets: List<RectF> = emptyList()
+    private var toAnotherWord = false
+
     var wordHighlightColor: Int = 0x66FFD54F
 
     private val gestures =
@@ -77,7 +91,9 @@ class ReaderTextView @JvmOverloads constructor(
         plainText = text
         rubySpans = ruby
         furigana = showFurigana
-        highlight = null
+        markedRange = null
+        markTargets = emptyList()
+        glide.clear()
         rebuild()
     }
 
@@ -88,25 +104,65 @@ class ReaderTextView @JvmOverloads constructor(
 
     /** Marks [start, end) (UTF-16 offsets of the line) as the looked-up word; null clears it. */
     override fun setHighlight(range: IntRange?) {
-        // TextView keeps its own Spannable copy of what setText was given.
-        val spannable = text as? Spannable ?: return
-        highlight?.let { spannable.removeSpan(it) }
-        highlight = null
-        val marked = range?.takeIf { !it.isEmpty() && it.last < spannable.length }
-        if (marked != null) {
-            val span = BackgroundColorSpan(wordHighlightColor)
-            spannable.setSpan(span, marked.first, marked.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            highlight = span
-        }
-        // The layout paints no background behind replacement spans, so runs with furigana
-        // draw their own.
-        for (ruby in spannable.getSpans(0, spannable.length, FuriganaSpan::class.java)) {
-            val start = spannable.getSpanStart(ruby)
-            val end = spannable.getSpanEnd(ruby)
-            val inside = marked != null && start <= marked.last && end > marked.first
-            ruby.background = if (inside) wordHighlightColor else 0
-        }
+        markedRange = range?.takeIf { !it.isEmpty() && it.last < text.length }
+        toAnotherWord = true
         invalidate()
+    }
+
+    /**
+     * The mark is drawn here rather than as a span of the text, so that it can glide from one
+     * word to the next: filled behind the text, or framed over it (ReaderSettings.wordMark).
+     */
+    override fun onDraw(canvas: Canvas) {
+        val targets = markedRange?.let { rowsOf(it) }.orEmpty()
+        if (targets != markTargets) {
+            glide.setTarget(targets, toAnotherWord || glide.moving)
+            markTargets = targets
+        }
+        toAnotherWord = false
+        glide.frame()
+        val radius = 3f * resources.displayMetrics.density
+        val alpha = glide.opacity
+        if (markStyle == ReaderSettings.WORD_MARK_HIGHLIGHT && glide.visible) {
+            fillPaint.color = wordHighlightColor
+            fillPaint.alpha = ((wordHighlightColor ushr 24) * alpha).toInt()
+            for (row in glide.drawn) canvas.drawRoundRect(row, radius, radius, fillPaint)
+        }
+        super.onDraw(canvas)
+        if (markStyle == ReaderSettings.WORD_MARK_OUTLINE && glide.visible) {
+            val width = 2f * resources.displayMetrics.density
+            framePaint.strokeWidth = width
+            framePaint.color = (wordHighlightColor and 0x00FFFFFF) or 0xE6000000.toInt()
+            framePaint.alpha = (0xE6 * alpha).toInt()
+            for (row in glide.drawn) {
+                canvas.drawRoundRect(row.left - width / 2, row.top - width / 2, row.right + width / 2,
+                    row.bottom + width / 2, radius, radius, framePaint)
+            }
+        }
+    }
+
+    /** The rows [range] takes in the text's layout, in this view's coordinates. */
+    private fun rowsOf(range: IntRange): List<RectF> {
+        val textLayout = layout ?: return emptyList()
+        val end = (range.last + 1).coerceAtMost(text.length)
+        if (range.first >= end) return emptyList()
+        val dx = totalPaddingLeft.toFloat() - scrollX
+        val dy = totalPaddingTop.toFloat() - scrollY
+        val rows = mutableListOf<RectF>()
+        for (line in textLayout.getLineForOffset(range.first)..textLayout.getLineForOffset(end - 1)) {
+            val from = maxOf(range.first, textLayout.getLineStart(line))
+            val to = minOf(end, textLayout.getLineEnd(line))
+            if (from >= to) continue
+            framePath.reset()
+            textLayout.getSelectionPath(from, to, framePath)
+            val row = RectF()
+            @Suppress("DEPRECATION")
+            framePath.computeBounds(row, true)
+            if (row.isEmpty) continue
+            row.offset(dx, dy)
+            rows.add(row)
+        }
+        return rows
     }
 
     private fun rebuild() {
@@ -276,6 +332,8 @@ class ReaderTextView @JvmOverloads constructor(
     }
 
     companion object {
+        /** How the looked-up word is marked in every reader text view (ReaderSettings.wordMark). */
+        @JvmStatic var markStyle: String = ReaderSettings.WORD_MARK_OUTLINE
         const val RUBY_SCALE = 0.5f
     }
 }

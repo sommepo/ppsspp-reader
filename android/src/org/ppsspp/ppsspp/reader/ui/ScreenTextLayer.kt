@@ -3,10 +3,13 @@
 
 package org.ppsspp.ppsspp.reader.ui
 
+import org.ppsspp.ppsspp.reader.ReaderCatalog
+import org.ppsspp.ppsspp.reader.ReaderSettings
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.RectF
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
@@ -25,7 +28,9 @@ import org.ppsspp.ppsspp.reader.screen.ScreenText
  * The invisible layer over the game's picture on one display. Where the game shows text in a
  * text box, and its profile says where the characters are, this makes them something to tap:
  * a tap on a character is reported for a lookup, and no touch that begins inside a text box
- * ever reaches the game. Everywhere else it takes nothing.
+ * ever reaches the game. Everywhere else it takes nothing, unless the game is played by touch
+ * ([touchPlay]): then a tap on the picture is the player going on, and a tap on an answer of a
+ * choice picks it (held, it is a lookup), for a game that does not take touches itself.
  *
  * It draws nothing but a mark on the word being looked up (and, as a setting for checking
  * positions, outlines of what can be tapped).
@@ -43,6 +48,12 @@ class ScreenTextLayer(
 
         /** A text box was tapped where there is no character. */
         fun onBoxTap(text: PlacedText)
+
+        /** Touch play: the picture was tapped where there is no text, or a text box beside it. */
+        fun onPictureTap() {}
+
+        /** Touch play: answer [answer] (from 0) of the choice [text] was tapped. */
+        fun onAnswerTap(text: PlacedText, answer: Int) {}
     }
 
     var listener: Listener? = null
@@ -82,6 +93,19 @@ class ScreenTextLayer(
             }
         }
 
+    /** Touch play is switched on (it applies to games whose profile says how: [touchMode]). */
+    var touchPlay: Boolean = false
+
+    /**
+     * How the running game is played by touch, as its profile says: ReaderCatalog.TOUCH_GAME, it
+     * takes touches itself, so the taps on its picture and on its answers go to it as they are;
+     * TOUCH_PRESS, the taps are turned into its buttons; empty, it is not played by touch.
+     */
+    var touchMode: () -> String = { "" }
+
+    private val playing get() = touchPlay && touchMode().isNotEmpty()
+    private fun gameTakesTouch() = touchMode() == ReaderCatalog.TOUCH_GAME
+
     /** Draw what can be tapped, to check that it sits on the game's text. */
     var outline: Boolean = false
         set(value) {
@@ -104,11 +128,32 @@ class ScreenTextLayer(
     private var down: PlacedText.Hit? = null
     private var downX = 0f
     private var downY = 0f
+    private var downTime = 0L
     private var moved = false
+
+    /** Touch play: the touch going on began on the picture, beside any text. */
+    private var downOnPicture = false
+    private val longPress = ViewConfiguration.getLongPressTimeout().toLong()
 
     private val markPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         color = ReaderStyle.HIGHLIGHT
+    }
+    /** How the looked-up word is marked: one of ReaderSettings.WORD_MARK_…. */
+    var markStyle: String = ReaderSettings.WORD_MARK_OUTLINE
+        set(value) {
+            if (field != value) {
+                field = value
+                invalidate()
+            }
+        }
+    private val frameWidth get() = dp(2f)
+    private val framePaint by lazy {
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = frameWidth
+            color = (ReaderStyle.HIGHLIGHT and 0x00FFFFFF) or 0xE6000000.toInt()
+        }
     }
     private val boxPaint = Paint().apply {
         style = Paint.Style.STROKE
@@ -180,7 +225,7 @@ class ScreenTextLayer(
     fun mark(presented: PresentedLine, range: IntRange?) {
         marked = if (range == null) null else presented
         markedRange = range
-        updateMarks()
+        updateMarks(toAnotherWord = true)
     }
 
     /** A lookup target for [presented] as shown in the game's picture. */
@@ -188,13 +233,22 @@ class ScreenTextLayer(
         override fun setHighlight(range: IntRange?) = mark(presented, range)
     }
 
-    private fun updateMarks() {
+    /** The mark as drawn, on its way to [marks]. */
+    private val glide = MarkGlide(this)
+
+    /** [toAnotherWord]: the mark glides there; else the picture moved and it simply follows. */
+    private fun updateMarks(toAnotherWord: Boolean = false) {
         val line = marked
         val range = markedRange
+        val before = marks
         marks = if (line == null || range == null) {
             emptyList()
         } else {
             placed.filter { it.presented.backlogId == line.backlogId }.flatMap { it.marks(range) }
+        }
+        if (marks != before || toAnotherWord) {
+            glide.setTarget(marks.map { RectF(it.left, it.top, it.right, it.bottom) },
+                toAnotherWord || glide.moving)
         }
         invalidate()
     }
@@ -218,13 +272,29 @@ class ScreenTextLayer(
                 // The picture may have moved since the last look.
                 refresh()
                 val hit = hitAt(event.x, event.y)
-                if (hit is PlacedText.Hit.Outside) {
+                downOnPicture = false
+                val toGame = hit is PlacedText.Hit.Outside ||
+                    (playing && gameTakesTouch() && isAnswer(hit))
+                if (toGame) {
                     down = null
-                    return false
+                    if (!playing || gameTakesTouch() || hit !is PlacedText.Hit.Outside) return false
+                    // While a choice is up a tap beside it would confirm whatever answer is lit:
+                    // it is taken and does nothing (an answer is picked by tapping it).
+                    downOnPicture = placed.none { it.presented.line.isChoice }
+                    if (!downOnPicture) {
+                        down = PlacedText.Hit.Outside
+                        downX = event.x
+                        downY = event.y
+                        downTime = event.eventTime
+                        moved = false
+                        return true
+                    }
+                } else {
+                    down = hit
                 }
-                down = hit
                 downX = event.x
                 downY = event.y
+                downTime = event.eventTime
                 moved = false
             }
 
@@ -233,20 +303,42 @@ class ScreenTextLayer(
 
             MotionEvent.ACTION_UP -> {
                 val hit = down
+                val onPicture = downOnPicture
                 down = null
+                downOnPicture = false
                 if (!moved) {
-                    when (hit) {
-                        is PlacedText.Hit.OnCharacter -> listener?.onCharacterTap(hit.text, hit.character)
-                        is PlacedText.Hit.Box -> listener?.onBoxTap(hit.text)
+                    val held = event.eventTime - downTime >= longPress
+                    when {
+                        onPicture -> listener?.onPictureTap()
+                        hit is PlacedText.Hit.OnCharacter && playing && !gameTakesTouch() && isAnswer(hit) && !held ->
+                            listener?.onAnswerTap(hit.text, answerAt(hit.text, hit.character))
+                        hit is PlacedText.Hit.OnCharacter -> listener?.onCharacterTap(hit.text, hit.character)
+                        // Beside the answers of a choice a tap would confirm whatever is lit: not that.
+                        hit is PlacedText.Hit.Box && playing && !gameTakesTouch() && !hit.text.presented.line.isChoice ->
+                            listener?.onPictureTap()
+                        hit is PlacedText.Hit.Box -> listener?.onBoxTap(hit.text)
                         else -> {}
                     }
                 }
             }
 
-            MotionEvent.ACTION_CANCEL -> down = null
+            MotionEvent.ACTION_CANCEL -> {
+                down = null
+                downOnPicture = false
+            }
         }
-        return down != null || event.actionMasked == MotionEvent.ACTION_UP ||
+        return down != null || downOnPicture || event.actionMasked == MotionEvent.ACTION_UP ||
             event.actionMasked == MotionEvent.ACTION_CANCEL
+    }
+
+    private fun isAnswer(hit: PlacedText.Hit): Boolean =
+        hit is PlacedText.Hit.OnCharacter && hit.text.presented.line.isChoice
+
+    /** Which answer of a choice a character is in: the answers are its text's lines. */
+    private fun answerAt(text: PlacedText, character: PlacedText.Glyph): Int {
+        val line = text.presented.line.text
+        val end = character.offset.coerceIn(0, line.length)
+        return line.subSequence(0, end).count { it == '\n' }
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -255,6 +347,7 @@ class ScreenTextLayer(
     }
 
     override fun onDraw(canvas: Canvas) {
+        glide.frame()
         if (outline) {
             for (text in placed) {
                 canvas.drawRect(text.box.left, text.box.top, text.box.right, text.box.bottom, boxPaint)
@@ -265,8 +358,23 @@ class ScreenTextLayer(
             }
         }
         val radius = dp(3f)
-        for (mark in marks) {
-            canvas.drawRoundRect(mark.left, mark.top, mark.right, mark.bottom, radius, radius, markPaint)
+        val alpha = (glide.opacity * 255).toInt()
+        when (markStyle) {
+            ReaderSettings.WORD_MARK_NONE -> Unit
+            ReaderSettings.WORD_MARK_OUTLINE -> {
+                val inset = -frameWidth / 2
+                framePaint.alpha = alpha * 0xE6 / 255
+                for (mark in glide.drawn) {
+                    canvas.drawRoundRect(mark.left + inset, mark.top + inset, mark.right - inset,
+                        mark.bottom - inset, radius, radius, framePaint)
+                }
+            }
+            else -> {
+                markPaint.alpha = alpha * (ReaderStyle.HIGHLIGHT ushr 24) / 255
+                for (mark in glide.drawn) {
+                    canvas.drawRoundRect(mark.left, mark.top, mark.right, mark.bottom, radius, radius, markPaint)
+                }
+            }
         }
     }
 

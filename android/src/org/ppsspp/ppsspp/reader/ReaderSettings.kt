@@ -19,6 +19,20 @@ class ReaderSettings(context: Context) {
     /** Draw the outlines of what can be tapped, to check that they sit on the text. */
     val screenTextOutline get() = preferences.getBoolean(KEY_SCREEN_TEXT_OUTLINE, false)
 
+    /** How the word being looked up is marked: "highlight" (a coloured box over it), "outline"
+     *  (a frame around it) or "none". */
+    val wordMark: String get() = when (val value = preferences.getString(KEY_WORD_MARK, WORD_MARK_OUTLINE)) {
+        WORD_MARK_HIGHLIGHT, WORD_MARK_NONE -> value
+        else -> WORD_MARK_OUTLINE
+    }
+
+    /** The corner of each headword's part of the popup where its card buttons stand:
+     *  "bottom_left" (the first value), "bottom_right", "top_left" or "top_right". */
+    val cardCorner: String get() = when (val value = preferences.getString(KEY_CARD_CORNER, CARD_CORNER_DEFAULT)) {
+        "bottom_right", "top_left", "top_right" -> value
+        else -> CARD_CORNER_DEFAULT
+    }
+
     /** Text size of the dictionary popup, in percent. */
     val popupScale get() = preferences.getInt(KEY_POPUP_SCALE, 100).coerceIn(60, 200)
 
@@ -78,6 +92,24 @@ class ReaderSettings(context: Context) {
 
     /** Emulated button pressed by the panel's advance control (an Android key code). */
     val advanceButton get() = preferences.getString(KEY_ADVANCE_BUTTON, "13")!!.toIntOrNull() ?: 13
+
+    /**
+     * Playing by touch alone: a tap on the game's picture where there is no text goes on (the
+     * advance button), a tap on an answer of a choice picks it, and a held finger on an answer
+     * looks its word up. A game made for a touch screen gets those taps itself.
+     */
+    val touchPlay get() = preferences.getBoolean(KEY_TOUCH_PLAY, touchPlayAtFirst())
+
+    /**
+     * Keeps Play by touch's first value, so that its switch shows it: on for a phone or tablet,
+     * off for a handheld with a controller of its own (an AYN Thor) — the maintainer plays by
+     * touch on the Fold only.
+     */
+    fun keepTouchPlayDefault() {
+        if (!preferences.contains(KEY_TOUCH_PLAY)) {
+            preferences.edit().putBoolean(KEY_TOUCH_PLAY, touchPlayAtFirst()).apply()
+        }
+    }
 
     // ---- Statistics ----
     var statsPaused: Boolean
@@ -230,8 +262,31 @@ class ReaderSettings(context: Context) {
     }
 
     companion object {
+        /**
+         * Play by touch's first value: on unless the device has game controls of its own. A
+         * controller that is plugged in or paired (external) does not count; on Android before 10,
+         * which cannot tell, any controller does. AYN's handhelds by their maker, in case theirs
+         * reports itself as external.
+         */
+        fun touchPlayAtFirst(): Boolean {
+            if (android.os.Build.MANUFACTURER.equals("AYN", ignoreCase = true)) return false
+            val controls = android.view.InputDevice.SOURCE_GAMEPAD or android.view.InputDevice.SOURCE_JOYSTICK
+            val builtIn = android.view.InputDevice.getDeviceIds().any { id ->
+                val device = android.view.InputDevice.getDevice(id) ?: return@any false
+                val isControls = device.sources and controls != 0 && !device.isVirtual
+                isControls && (android.os.Build.VERSION.SDK_INT < 29 || !device.isExternal)
+            }
+            return !builtIn
+        }
+
         const val KEY_SCREEN_TEXT = "reader_screen_text"
         const val KEY_SCREEN_TEXT_OUTLINE = "reader_screen_text_outline"
+        const val KEY_CARD_CORNER = "reader_card_corner"
+        const val CARD_CORNER_DEFAULT = "bottom_left"
+        const val KEY_WORD_MARK = "reader_word_mark"
+        const val WORD_MARK_HIGHLIGHT = "highlight"
+        const val WORD_MARK_OUTLINE = "outline"
+        const val WORD_MARK_NONE = "none"
         const val KEY_POPUP_SCALE = "reader_popup_scale"
         const val KEY_POPUP_HEIGHT = "reader_popup_height"
         const val KEY_POPUP_AUTOHIDE = "reader_popup_autohide"
@@ -253,6 +308,7 @@ class ReaderSettings(context: Context) {
         const val KEY_SHOW_CHOICES = "reader_show_choices"
         const val KEY_REREAD_COLOUR = "reader_reread_colour"
         const val KEY_ADVANCE_BUTTON = "reader_advance_button"
+        const val KEY_TOUCH_PLAY = "reader_touch_play"
         const val KEY_STATS_PAUSED = "reader_stats_paused"
         const val KEY_STATS_BUTTON = "reader_stats_button"
         const val KEY_STATS_INSTALL = "reader_stats_install"

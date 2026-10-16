@@ -110,7 +110,7 @@ if(USING_QT_UI)
 		qt/reader_dialogs.cpp qt/reader_dialogs.h
 		qt/reader_games.cpp qt/reader_games.h
 		qt/reader_media.cpp qt/reader_media.h
-		qt/reader_overlay.cpp qt/reader_overlay.h
+		qt/reader_overlay.cpp qt/reader_overlay.h qt/reader_crt_frame.cpp qt/reader_crt_frame.h
 		qt/reader_pad.cpp qt/reader_pad.h
 		qt/reader_link.cpp qt/reader_link.h
 		qt/reader_steam.cpp qt/reader_steam.h

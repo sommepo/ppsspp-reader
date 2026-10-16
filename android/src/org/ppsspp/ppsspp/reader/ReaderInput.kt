@@ -19,6 +19,10 @@ import org.ppsspp.ppsspp.reader.cursor.HoverCursor
 object ReaderInput {
     /** The circle button's bit in the PSP's button word: "yes" on a Japanese console. */
     const val PSP_CIRCLE = 13
+    const val PSP_UP = 4
+    const val PSP_RIGHT = 5
+    const val PSP_DOWN = 6
+    const val PSP_LEFT = 7
 
     /** The button that pauses and resumes the statistics, or -1. */
     @Volatile

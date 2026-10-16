@@ -39,6 +39,37 @@ Things worth knowing:
 - **The handheld make is lighter**: the Android apps build the shader with fewer samples for
   the glow and along a line. Everything else is the same.
 
+## The frame
+
+With the CRT picture on, the computer's app can also put the tube's frame around it: what
+a photograph of an old monitor shows of it, after michadame's monitor frame. Under *Frame*
+in the CRT settings:
+
+- **Frame**: the plastic of the case, *Charcoal* (at first), *Black*, *Beige* (the putty of a
+  90s office monitor), or *None*.
+- **Room**: *Lit*, a lamp in the room lights the plastic and the recess casts a shadow on the
+  glass; *Dark*, only the picture lights the recess, and the case is all but black.
+- **Wear**: dust settled on the recess's bottom shelf, grime in the seams, plastic aged by
+  the years; none at 0.
+
+The opening follows the tube's edge as the shader draws it (*Warp* and *Corners*), a little
+inside it, so the frame hides the picture's very edge as a real case does. The frame is drawn
+by the reader's layer over the game (`reader/qt/reader_crt_frame.*`, made in the background once
+for each window size and setting, then only drawn), under the word's mark and the rest, so
+it needs nothing of the emulator's renderers. It is shown while the reader is reading the
+game. The looks leave it as it is.
+
+**On Android** (2026-10-16, the maintainer: "Android builds should also have crt frame updates"):
+the same drawing, moved out of Qt into `reader/core/crt_frame.h` (header only, so no build lists
+it), which the computer's `reader_crt_frame.cpp` now calls too. `crt_jni.h` hands it to the apps
+(`CrtNative.frame`, `CrtNative.revision`) and `ui/CrtFrameView.kt` draws it: the first child of the
+reader's layer on the game's display, made in the background whenever the view's size, the game's
+picture or the settings change (looked at every half second). The settings page has the frame's
+rows. **Azahar Reader leaves it out** (`READER_CRT_NO_FRAME` in its bridge: a phone shows both 3DS
+screens on one display, and a frame around one would cover the other), and its page has no frame
+rows. Checked by the tests of the drawing (`crt_test.cpp`: the glass clear, the case solid, both
+colour forms the same where solid) and the apps' builds. **Seen on the Thor** (PPSSPP Reader, 428's first screen, the picture filling the 16:9 display): the charcoal case at the curved edges, the seal, the lit recess with dust on its bottom shelf. Not seen with a 4:3 game, nor on the Fold.
+
 ## How it is made
 
 One shader, one pass, the same text in every reader fork and for every graphics API:
@@ -53,6 +84,7 @@ follow Timothy Lottes' public-domain CRT shader, as michadame's do.
 | `reader/core/crt.h`, `crt.cpp` | The table of what can be set (`kParams`), the looks (`kPresets`), the values, and `Pack`: the eight vectors (128 bytes) a renderer hands the shader. Knows nothing of an emulator or a toolkit. |
 | `reader/core/crt_shader.glsl`, `crt_shader.inc` | The shader, and the same as a C++ string (made by `crt.py`). |
 | `reader/qt/reader_crt_page.*` | The settings page on a computer, built from the table. |
+| `reader/qt/reader_crt_frame.*` | The tube's frame around the picture on a computer. |
 | `reader/core/crt_jni.h`, `android/src/org/ppsspp/ppsspp/reader/ui/CrtSettings.kt` | The Android apps' bridge and their settings page, built from the same table. |
 | `reader/desktop/tests/crt_test.cpp` | Tests of the table, the kept text, the looks, what the shader is handed, the glass's bend. |
 | `assets/shaders/reader_crt.fsh`, `reader_crt_mobile.fsh` | The shader as two of this emulator's post-processing files (the second is the handheld make), made by `crt.py`: do not edit. |

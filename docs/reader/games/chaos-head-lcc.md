@@ -53,3 +53,10 @@ Circle advances, cross hides the window, square is the menu (with Tips on L).
 - **Not looked at**: choices and delusion triggers, lines of three rows, a line with
   half-width characters, the middle-of-the-screen lines' cells over a screenshot.
 - **Tests**: none. **Device**: not yet.
+
+## Tapping an answer (2026-10-16)
+
+Looked for, for playing by touch on a phone: from `later.state`, some 5,400 presses of circle in
+the harness went through several chapters (with the pink delusion scenes) without the game
+stopping at a choice or a delusion trigger. So nothing is reported for a tap to pick; the
+buttons stay (`-- reader: buttons up down circle cross square`).

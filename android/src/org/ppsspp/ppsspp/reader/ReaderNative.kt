@@ -50,6 +50,13 @@ object ReaderNative {
     /** Presses or releases a button of the PSP, by the number of its bit in the button word. */
     external fun pressButton(bit: Int, down: Boolean)
 
+    /**
+     * Which answer of the choice on screen the game's cursor is on, as the profile reports it:
+     * the answer (from 0; -1 while on none yet) and 1 when the answers are side by side. Null
+     * when the profile says nothing about it.
+     */
+    external fun answerCursor(): IntArray?
+
     /** True while the game itself is in front: not the emulator's menus, not its pause screen. */
     external fun inGame(): Boolean
 

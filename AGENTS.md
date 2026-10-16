@@ -41,7 +41,7 @@ has their machines, devices and requests. It is not needed for contributing.
 | --- | --- |
 | `reader/core/` | The text engine: hooks, the Lua profiles' API, text events. It knows nothing of the emulator; `emulator.cpp` is the one file that ties it to PPSSPP, and `emulator.h` is all that upstream files include. |
 | `assets/reader/profiles/` | **The game scripts** (profiles), one `<GAMEID>.lua` per game (`ULJS00219.lua`): built into the apps of one's own, and published as the list the apps install from ([Game scripts](#game-scripts)). |
-| `reader/ui/` | The app's main screen in the manner of the PSP's own menu (`xmb.cpp`), built from the emulator's interface parts. |
+| `reader/ui/` | The app's main screen in the manner of the PSP's own menu (`xmb.cpp`), built from the emulator's interface parts. Its Games column holds only the games whose text can be read (a game leaves it once its ID has been read from its file) unless Settings, *Games shown* says every game (the file `SYSTEM/reader-all-games`; 2026-10-16). |
 | `reader/desktop/`, `reader/qt/` | The desktop app's reading layer: the logic (with tests) and what is on screen; `reader/qt/host.cpp` ties it to the emulator's Qt frontend. |
 | `reader/save_sync/`, `reader/ui/save_sync_screen.*` | Save sync (`docs/reader/save-sync.md`): the Eden Reader fork's engine, what fits it to the PSP's save folders, and its page. Tests start services of their own on loopback ports; never point one at a service someone uses. |
 | `reader/harness/` | The headless harness: runs a real game without display, GPU or sound and takes commands. How profiles are written. |

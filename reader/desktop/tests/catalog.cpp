@@ -174,3 +174,21 @@ TEST_CASE("Settings: the line's audio on a card is a choice, for all games and p
     REQUIRE(settings.CardAudioGeneral() == Audio::Ask);
     REQUIRE(ReaderSettings::CardAudioValue(Audio::Never) == QStringLiteral("never"));
 }
+
+TEST_CASE("Catalog: a profile says how its game is played by touch; the setting is on",
+          "[reader][catalog][settings]") {
+    const QString game = QStringLiteral("ULJS00219");
+    REQUIRE(Catalog::Describe(game, QStringLiteral("-- reader: touch Press\n"), false).touch ==
+            QStringLiteral("press"));
+    REQUIRE(Catalog::Describe(game, QStringLiteral("-- reader: touch game\n"), false).touch ==
+            QStringLiteral("game"));
+    // Anything else, or nothing, is a game not played by touch.
+    REQUIRE(Catalog::Describe(game, QStringLiteral("-- reader: touch sometimes\n"), false)
+                .touch.isEmpty());
+    REQUIRE(Catalog::Describe(game, QStringLiteral("-- reader: title x\n"), false).touch.isEmpty());
+    QTemporaryDir folder;
+    ReaderSettings settings(folder.filePath(QStringLiteral("reader.ini")));
+    REQUIRE_FALSE(settings.TouchPlay()); // off at first on a computer
+    settings.SetValue(ReaderSettings::KeyTouchPlay, true);
+    REQUIRE(settings.TouchPlay());
+}

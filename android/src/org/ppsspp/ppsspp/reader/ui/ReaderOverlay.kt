@@ -34,6 +34,7 @@ import org.ppsspp.ppsspp.reader.ProfileStatus
 import org.ppsspp.ppsspp.reader.ReaderNative
 import org.ppsspp.ppsspp.reader.ReaderSession
 import org.ppsspp.ppsspp.reader.ReaderSettings
+import org.ppsspp.ppsspp.reader.ReaderCatalog
 import org.ppsspp.ppsspp.reader.cursor.HoverCursor
 import org.ppsspp.ppsspp.reader.mining.Miner
 import org.ppsspp.ppsspp.reader.model.ScreenLayout
@@ -74,6 +75,12 @@ class ReaderOverlay(
 
         /** Lets the user say what the running game's cards do with their line's audio. */
         fun chooseCardAudio()
+
+        /** Touch play: the player goes on, as with the advance button. */
+        fun goOn() = ReaderSession.pressAdvance()
+
+        /** Touch play: picks answer [answer] of the choice on screen; false when it cannot. */
+        fun pickAnswer(answer: Int): Boolean = ReaderSession.pickAnswer(answer)
 
         /** True when a second screen is showing the game, so its overlay should hold the panel. */
         fun hasSecondaryScreen(): Boolean
@@ -146,6 +153,14 @@ class ReaderOverlay(
             screenText.surface = value
         }
 
+    /** The few buttons a game played by touch still needs (its script's "buttons" line). */
+    private val touchButtons by lazy {
+        TouchButtons(context) { code, down -> ReaderSession.holdButton(code, down) }
+    }
+
+    /** A game with a profile runs: its buttons may be shown. */
+    private var gameRunning = false
+
     init {
         layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         buildScreenText()
@@ -157,6 +172,7 @@ class ReaderOverlay(
         lookups.passThrough = panel
         lookups.passThroughAt = { x, y -> screenText.isTextBox(x, y) }
         lookups.onClosed = { lookupInGame = false }
+        buildTouchButtons()
         addView(lookups)
         applySettings()
     }
@@ -171,9 +187,56 @@ class ReaderOverlay(
             override fun onBoxTap(text: PlacedText) {
                 lookups.close()
             }
+
+            // Touch play: with a popup open a tap only closes it, as everywhere else.
+            override fun onPictureTap() {
+                if (lookups.isOpen) lookups.close() else host.goOn()
+            }
+
+            override fun onAnswerTap(text: PlacedText, answer: Int) {
+                if (lookups.isOpen) {
+                    lookups.close()
+                } else if (!host.pickAnswer(answer)) {
+                    Toast.makeText(context, R.string.reader_touch_pick_unknown, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+        // The tube's frame around the picture, under everything else (CrtFrameView). Not on the
+        // second display, which shows no game.
+        if (!secondary) {
+            addView(
+                CrtFrameView(context) {
+                    screenText.screenAreas(ScreenLayout.SCREEN_GAME).firstOrNull()?.let {
+                        android.graphics.RectF(it.left, it.top, it.right, it.bottom)
+                    }
+                },
+                0,
+                LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+            )
         }
         addView(screenText, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
+
+    /** At the right edge, half way down: where a game's picture seldom has its text. */
+    private fun buildTouchButtons() {
+        if (secondary) return
+        addView(
+            touchButtons,
+            LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL)
+                .apply { setMargins(0, 0, dp(10f), 0) }
+        )
+    }
+
+    private fun showTouchButtons() {
+        if (secondary) return
+        // Every button for a game played by touch (Play by touch on, its script says how).
+        val playedByTouch = settings.touchPlay && gameRunning &&
+            ReaderCatalog.touch(context, ReaderSession.gameKey).isNotEmpty()
+        touchButtons.show(if (playedByTouch) TouchButtons.ALL else emptyList())
+    }
+
+    /** The touch play buttons shown, for tests. */
+    val touchButtonNames: List<String> get() = if (secondary) emptyList() else touchButtons.names
 
     /** The session line: text only, and no touch stops at it. */
     private fun buildSessionView() {
@@ -284,21 +347,26 @@ class ReaderOverlay(
     }
 
     /**
-     * A lookup in the game's own text: the popup goes beside the text's rows, at the word.
+     * A lookup in the game's own text: the popup goes right next to the word, above or below
+     * its row (over the text's other rows if need be).
      * [quiet] when it was not asked for by hand (see [LookupLayer.lookup]).
      */
     private fun lookUpInGame(text: PlacedText, character: PlacedText.Glyph, quiet: Boolean = false) {
         lookupInGame = true
+        wayStart = if (cursorOn) HoverCursor.x to HoverCursor.y else null
         lookups.lookup(
             screenText.targetFor(text.presented),
             text.presented,
             character.offset,
-            LookupLayer.Anchor(text.rows, character.drawn.left),
+            LookupLayer.Anchor(
+                Area(text.rows.left, character.drawn.top, text.rows.right, character.drawn.bottom),
+                character.drawn.left
+            ),
             quiet
         )
     }
 
-    /** A lookup from the panel: the popup goes beside the panel, at the tapped word. */
+    /** A lookup from the panel: the popup goes right next to the tapped word, above or below its row. */
     private fun lookupInPanel(
         view: ReaderTextView,
         presented: PresentedLine,
@@ -307,8 +375,10 @@ class ReaderOverlay(
         quiet: Boolean = false
     ) {
         lookupInGame = false
-        val nearX = LookupLayer.areaOf(view, lookups).left + bounds.left
-        lookups.lookup(view, presented, offset, LookupLayer.Anchor(LookupLayer.areaOf(panel, lookups), nearX), quiet)
+        wayStart = if (cursorOn) HoverCursor.x to HoverCursor.y else null
+        val area = LookupLayer.areaOf(view, lookups)
+        val row = Area(area.left, area.top + bounds.top, area.right, area.top + bounds.bottom)
+        lookups.lookup(view, presented, offset, LookupLayer.Anchor(row, area.left + bounds.left), quiet)
     }
 
     private fun buildHandle() {
@@ -386,6 +456,10 @@ class ReaderOverlay(
     // ---- ReaderSession.Listener ----
 
     override fun onLine(presented: PresentedLine) {
+        if (!gameRunning) {
+            gameRunning = true
+            showTouchButtons()
+        }
         if (presented.line.isChoice) {
             showChoices(presented)
         } else {
@@ -455,6 +529,8 @@ class ReaderOverlay(
         private set
 
     override fun onProfileStatus(status: ProfileStatus) {
+        gameRunning = status.loaded && status.error.isEmpty()
+        showTouchButtons()
         // A game with text to point at has begun, or ended: the second display's trackpad
         // comes and goes with it.
         HoverCursor.refresh()
@@ -505,7 +581,13 @@ class ReaderOverlay(
 
     private fun applySettings() {
         screenText.active = settings.screenText
+        // The second display of a device with two is the trackpad, never played on.
+        screenText.touchPlay = settings.touchPlay && !secondary
+        screenText.touchMode = { ReaderCatalog.touch(context, ReaderSession.gameKey) }
+        showTouchButtons()
         screenText.outline = settings.screenTextOutline
+        screenText.markStyle = settings.wordMark
+        ReaderTextView.markStyle = settings.wordMark
         val top = settings.panelPosition == ReaderSettings.POSITION_TOP
         val edge = if (top) Gravity.TOP else Gravity.BOTTOM
         (panel.layoutParams as LayoutParams).apply {
@@ -652,6 +734,13 @@ class ReaderOverlay(
 
     private var hovered: Any? = null
     private var resting: Hover? = null
+    // The way from where the cursor looked a word up to its popup (see [onWayToPopup]).
+    private var wayStart: Pair<Float, Float>? = null
+    private var wayPopup = -1
+    private var wayOpen = false
+    private var wayFromX = 0f
+    private var wayFromY = 0f
+    private var wayNearest = Float.POSITIVE_INFINITY
     private val hoverLookup = Runnable {
         val target = resting
         if (cursorOn && target != null) {
@@ -764,7 +853,9 @@ class ReaderOverlay(
         val x = HoverCursor.x
         val y = HoverCursor.y
         lookups.cursorMoved(cursorOnPopupOrItsWord())
-        if (!pointed || lookups.isAsking || lookups.popupContains(x, y)) {
+        // On the way from the word to its popup (to its card button, say) the words the cursor
+        // passes over are not looked up, so the popup stays where it is.
+        if (!pointed || lookups.isAsking || lookups.popupContains(x, y) || onWayToPopup(x, y)) {
             removeCallbacks(hoverLookup)
             return
         }
@@ -774,6 +865,56 @@ class ReaderOverlay(
         resting = target
         removeCallbacks(hoverLookup)
         if (target != null) postDelayed(hoverLookup, HOVER_REST_MS)
+    }
+
+    /**
+     * True while the cursor is between where it looked the word up (with some room around it)
+     * and the popup: in the smallest shape without dents that holds both, and not turned back.
+     * The same rule as the desktop reader's.
+     */
+    private fun onWayToPopup(x: Float, y: Float): Boolean {
+        val box = lookups.popupArea() ?: return false
+        if (lookups.shownCount != wayPopup) {
+            // A new popup: its way begins where its word was looked up from.
+            wayPopup = lookups.shownCount
+            val start = wayStart
+            wayOpen = start != null
+            if (start != null) {
+                wayFromX = start.first
+                wayFromY = start.second
+            }
+            wayNearest = Float.POSITIVE_INFINITY
+        }
+        if (!wayOpen) return false
+        if (box.contains(x, y)) return true
+        val dx = maxOf(box.left - x, 0f, x - box.right)
+        val dy = maxOf(box.top - y, 0f, y - box.bottom)
+        val distance = kotlin.math.hypot(dx, dy)
+        if (distance > wayNearest + dp(14f)) {
+            wayOpen = false
+            return false
+        }
+        wayNearest = minOf(wayNearest, distance)
+        val room = dp(18f).toFloat()
+        val points = listOf(
+            wayFromX - room to wayFromY - room, wayFromX + room to wayFromY - room,
+            wayFromX + room to wayFromY + room, wayFromX - room to wayFromY + room,
+            box.left to box.top, box.right to box.top, box.right to box.bottom, box.left to box.bottom
+        ).sortedWith(compareBy({ it.first }, { it.second }))
+        fun cross(o: Pair<Float, Float>, a: Pair<Float, Float>, b: Pair<Float, Float>) =
+            (a.first - o.first) * (b.second - o.second) - (a.second - o.second) * (b.first - o.first)
+        val hull = ArrayList<Pair<Float, Float>>()
+        for (pass in 0 until 2) {
+            val floor = hull.size + 1
+            for (point in if (pass == 0) points else points.reversed()) {
+                while (hull.size > floor && cross(hull[hull.size - 2], hull.last(), point) <= 0) hull.removeAt(hull.size - 1)
+                hull.add(point)
+            }
+            hull.removeAt(hull.size - 1)
+        }
+        val inside = hull.indices.all { i -> cross(hull[i], hull[(i + 1) % hull.size], x to y) >= 0 }
+        if (!inside) wayOpen = false
+        return inside
     }
 
     /** True while the cursor is on the open popup or on the word the popup is about. */

@@ -9,6 +9,11 @@
         app:title="@string/reader_pref_screen_text"
         app:summary="@string/reader_pref_screen_text_summary"
         app:iconSpaceReserved="false" />
+    <SwitchPreferenceCompat
+        app:key="reader_touch_play"
+        app:title="@string/reader_pref_touch_play"
+        app:summary="@string/reader_pref_touch_play_summary"
+        app:iconSpaceReserved="false" />
     <SeekBarPreference
         app:key="reader_popup_scale"
         app:defaultValue="100"
@@ -35,6 +40,22 @@
         android:max="80"
         app:showSeekBarValue="true"
         app:title="@string/reader_pref_popup_height"
+        app:iconSpaceReserved="false" />
+    <ListPreference
+        app:key="reader_card_corner"
+        app:defaultValue="bottom_left"
+        app:entries="@array/reader_card_corner_entries"
+        app:entryValues="@array/reader_card_corner_values"
+        app:title="@string/reader_pref_card_corner"
+        app:useSimpleSummaryProvider="true"
+        app:iconSpaceReserved="false" />
+    <ListPreference
+        app:key="reader_word_mark"
+        app:defaultValue="outline"
+        app:entries="@array/reader_word_mark_entries"
+        app:entryValues="@array/reader_word_mark_values"
+        app:title="@string/reader_pref_word_mark"
+        app:useSimpleSummaryProvider="true"
         app:iconSpaceReserved="false" />
     <SwitchPreferenceCompat
         app:key="reader_screen_text_outline"

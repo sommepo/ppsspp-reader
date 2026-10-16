@@ -6,6 +6,7 @@
 #include <QPainter>
 #include <cmath>
 #include <QHideEvent>
+#include <QResizeEvent>
 #include <QShowEvent>
 #include <QLinearGradient>
 #include <QRadialGradient>
@@ -76,15 +77,82 @@ ReaderOverlay::ReaderOverlay(QWidget* parent) : QWidget(parent, OverlayFlags()) 
         update();
         emit ContentChanged();
     });
+    glide_timer.setTimerType(Qt::PreciseTimer);
+    glide_timer.setInterval(1000 / 120);
+    connect(&glide_timer, &QTimer::timeout, this, &ReaderOverlay::GlideFrame);
+    crt_frame.ready = [this] {
+        update();
+        emit ContentChanged();
+    };
+    // The CRT settings may change in their page at any time: a look now and then is enough.
+    frame_timer.setInterval(400);
+    connect(&frame_timer, &QTimer::timeout, this, &ReaderOverlay::RefreshFrame);
+    frame_timer.start();
+}
+
+void ReaderOverlay::RefreshFrame() {
+    if (session_picture.isValid()) {
+        crt_frame.Update(size(), session_picture, devicePixelRatioF());
+    }
+}
+
+void ReaderOverlay::resizeEvent(QResizeEvent* event) {
+    QWidget::resizeEvent(event);
+    RefreshFrame();
+}
+
+QRect ReaderOverlay::CursorArea() const {
+    if (!cursor_visible) {
+        return {};
+    }
+    if (cursor_character) {
+        return cursor_character->adjusted(-6, -6, 6, 6).toAlignedRect();
+    }
+    const qreal reach = Style::PointerSize(this) * 1.5 + 4;
+    return QRectF(cursor_position - QPointF(reach, reach), QSizeF(reach * 2, reach * 2)).toAlignedRect();
 }
 
 void ReaderOverlay::SetMarks(const QList<QRectF>& marks_) {
     if (marks == marks_) {
         return;
     }
+    // To another word it glides; a mark the window's new size moved is simply there.
+    const bool glide = mark_glide.Visible() && size() == marks_size;
     marks = marks_;
+    marks_size = size();
+    mark_glide.SetTarget(marks, glide);
+    if (mark_glide.Moving() && !glide_timer.isActive()) {
+        glide_clock.start();
+        glide_timer.start();
+    }
     update();
     emit ContentChanged();
+}
+
+void ReaderOverlay::GlideFrame() {
+    // Only where the mark was and is: the rest of the window (the frame) stands still.
+    QRectF dirty;
+    for (const QRectF& rect : mark_glide.Drawn()) {
+        dirty = dirty.united(rect);
+    }
+    const bool moving = mark_glide.Advance(static_cast<qreal>(glide_clock.restart()) / 1000);
+    for (const QRectF& rect : mark_glide.Drawn()) {
+        dirty = dirty.united(rect);
+    }
+    update(dirty.adjusted(-4, -4, 4, 4).toAlignedRect());
+    if (!moving) {
+        glide_timer.stop();
+        // A mark faded out: the window may go.
+        emit ContentChanged();
+    }
+}
+
+void ReaderOverlay::SetMarkStyle(const QString& style) {
+    if (mark_style == style) {
+        return;
+    }
+    mark_style = style;
+    update();
 }
 
 void ReaderOverlay::SetOutlines(const QList<ReaderApp::PlacedText>& texts) {
@@ -112,6 +180,7 @@ void ReaderOverlay::SetSessionLine(const QString& text, const QRectF& picture, b
     session_paused = paused;
     session_line = text;
     session_picture = picture;
+    RefreshFrame();
     update();
     emit ContentChanged();
 }
@@ -122,10 +191,11 @@ void ReaderOverlay::SetCursor(bool visible, const QPointF& position,
         cursor_character == character) {
         return;
     }
+    const QRect before = CursorArea();
     cursor_visible = visible;
     cursor_position = position;
     cursor_character = character;
-    update();
+    update(before.united(CursorArea()));
     emit ContentChanged();
 }
 
@@ -138,7 +208,7 @@ void ReaderOverlay::ShowMessage(const QString& text, const QRectF& picture) {
 }
 
 bool ReaderOverlay::HasContent() const {
-    return !marks.isEmpty() || !outline_boxes.isEmpty() || !session_line.isEmpty() || session_paused ||
+    return !marks.isEmpty() || mark_glide.Visible() || !crt_frame.Image().isNull() || !outline_boxes.isEmpty() || !session_line.isEmpty() || session_paused ||
            cursor_visible || !message.isEmpty();
 }
 
@@ -147,6 +217,9 @@ void ReaderOverlay::paintEvent(QPaintEvent*) {
     painter.setCompositionMode(QPainter::CompositionMode_Source);
     painter.fillRect(rect(), Qt::transparent);
     painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+    if (!crt_frame.Image().isNull()) {
+        painter.drawImage(QPointF(0, 0), crt_frame.Image());
+    }
     painter.setRenderHint(QPainter::Antialiasing);
 
     if (!outline_boxes.isEmpty()) {
@@ -161,11 +234,24 @@ void ReaderOverlay::paintEvent(QPaintEvent*) {
         }
     }
 
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(Style::Highlight);
-    for (const QRectF& mark : std::as_const(marks)) {
-        painter.drawRoundedRect(mark, 3, 3);
+    const QList<QRectF> drawn_marks = mark_glide.Drawn();
+    painter.setOpacity(mark_glide.Opacity());
+    if (mark_style == QStringLiteral("outline")) {
+        QColor frame = Style::Highlight;
+        frame.setAlpha(0xE6);
+        painter.setPen(QPen(frame, 2.0));
+        painter.setBrush(Qt::NoBrush);
+        for (const QRectF& mark : drawn_marks) {
+            painter.drawRoundedRect(mark.adjusted(-1, -1, 1, 1), 3, 3);
+        }
+    } else if (mark_style != QStringLiteral("none")) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(Style::Highlight);
+        for (const QRectF& mark : drawn_marks) {
+            painter.drawRoundedRect(mark, 3, 3);
+        }
     }
+    painter.setOpacity(1);
 
     QFont font = painter.font();
     font.setFamilies(Style::JapaneseFamilies());

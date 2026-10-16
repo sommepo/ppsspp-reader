@@ -1,5 +1,6 @@
 -- reader: title D.C.I&II P.S.P. ～ダ・カーポI&II～ プラスシチュエーション ポータブル, disc 1: D.C.P.S.
 -- reader: reads The message window with speakers and furigana, and choices
+-- reader: touch press
 -- reader: version ULJM-05718
 -- D.C.I&II P.S.P. (Kadokawa Shoten/CIRCUS, 2010), PSP, disc 1 (D.C.P.S.), ULJM-05718.
 -- EBOOT.BIN 95CE6F69. Disc 2 is ULJM05719.lua.
@@ -45,6 +46,7 @@ local TYPED = base + build.typed
 local OPACITY = base + build.opacity
 local SELECT = base + build.select
 local SELECT_LIST, SELECT_COUNT, SELECT_OPACITY, SELECT_PARTS = 0x48, 0x66, 0x68, 0x6c
+local SELECT_CURSOR = 0x65 -- the answer the cursor is on
 local ANSWER, ANSWER_TEXT, PART_PLACE = 0x84, 4, 0x40
 
 -- The line has to stand for this many frames: what a skip runs through is not read.
@@ -257,13 +259,19 @@ reader.on_frame(function()
     local up = state and state & 0xff == 2 and mem.u8(SELECT + SELECT_OPACITY) == 0xff
     if not up then
         choice_stood = 0
+        reader.cursor(nil)
         if choice_shown then
             reader.layout("choice", nil)
             choice_shown = false
         end
         return
     end
-    if choice_shown then return end
+    if choice_shown then
+        -- Which answer the cursor is on: what a tap on an answer is turned into presses with.
+        local at = mem.u8(SELECT + SELECT_CURSOR)
+        if at and at < 8 then reader.cursor(at) end
+        return
+    end
     choice_stood = choice_stood + 1
     if choice_stood < SHOWN_FRAMES then return end
     local answers, ruby, cells = read_choice()
@@ -275,6 +283,7 @@ end)
 
 reader.on_state_loaded(function()
     choice_stood = 0
+    reader.cursor(nil)
     if choice_shown then
         reader.layout("choice", nil)
         choice_shown = false

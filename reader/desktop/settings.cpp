@@ -13,6 +13,9 @@ namespace ReaderApp {
 
 const QString ReaderSettings::KeyScreenText = QStringLiteral("reader_screen_text");
 const QString ReaderSettings::KeyScreenTextOutline = QStringLiteral("reader_screen_text_outline");
+const QString ReaderSettings::KeyTouchPlay = QStringLiteral("reader_touch_play");
+const QString ReaderSettings::KeyWordMark = QStringLiteral("reader_word_mark");
+const QString ReaderSettings::KeyCardCorner = QStringLiteral("reader_card_corner");
 const QString ReaderSettings::KeyPopupScale = QStringLiteral("reader_popup_scale");
 const QString ReaderSettings::KeyPopupHeight = QStringLiteral("reader_popup_height");
 const QString ReaderSettings::KeyPopupAutoHide = QStringLiteral("reader_popup_autohide");
@@ -113,6 +116,22 @@ bool ReaderSettings::ScreenText() const {
 }
 bool ReaderSettings::ScreenTextOutline() const {
     return Bool(KeyScreenTextOutline, false);
+}
+bool ReaderSettings::TouchPlay() const {
+    // Off at first on a computer: the maintainer plays by touch on a phone only.
+    return Bool(KeyTouchPlay, false);
+}
+QString ReaderSettings::CardCorner() const {
+    const QString value = String(KeyCardCorner, QStringLiteral("bottom_left"));
+    return value == QStringLiteral("bottom_right") || value == QStringLiteral("top_left") ||
+                   value == QStringLiteral("top_right")
+               ? value
+               : QStringLiteral("bottom_left");
+}
+QString ReaderSettings::WordMark() const {
+    const QString value = String(KeyWordMark, QStringLiteral("outline"));
+    return value == QStringLiteral("highlight") || value == QStringLiteral("none") ? value
+                                                                                : QStringLiteral("outline");
 }
 int ReaderSettings::PopupScale() const {
     return Int(KeyPopupScale, 100, 60, 200);

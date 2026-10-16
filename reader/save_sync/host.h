@@ -44,14 +44,54 @@ struct Conflict {
 [[nodiscard]] std::vector<std::string> DiscsWithSaves(const std::string& savedata);
 
 /**
- * Once, when the app starts. `savedata` is PSP/SAVEDATA, `data` a folder of save sync's own
- * (its settings, its notes, the saves that were replaced). `say` shows the user a sentence
- * and may be called from any thread. With the settings switched on, every game that has a
- * save here is brought in line in the background.
+ * PSP/SAVEDATA where this system's own file calls do not reach it: a memory stick that is a
+ * folder chosen with Android's file picker (a document tree, "content://…"), reached through
+ * the app's own file functions. Paths are relative to SAVEDATA with '/' between names
+ * ("ULJM05887", "ULJM05887/DATA.BIN"; "" is SAVEDATA itself). Each returns false when it did
+ * not work.
+ */
+struct Store {
+    struct Entry {
+        std::string name;
+        bool folder{};
+        /// When it was last written, in milliseconds since 1970; 0 when not known.
+        std::int64_t modified_ms{};
+    };
+    /// What a folder holds.
+    std::function<bool(const std::string& path, std::vector<Entry>& entries)> list;
+    std::function<bool(const std::string& path, std::string& content)> read;
+    /// Makes the file or replaces it; its folder is there.
+    std::function<bool(const std::string& path, std::string_view content)> write;
+    std::function<bool(const std::string& path)> make_folder;
+    /// A file, or a folder with everything in it. True when it is not there afterwards.
+    std::function<bool(const std::string& path)> remove;
+    /// Gives a folder of SAVEDATA another name.
+    std::function<bool(const std::string& path, const std::string& name)> rename;
+
+    [[nodiscard]] explicit operator bool() const {
+        return static_cast<bool>(list);
+    }
+};
+
+/**
+ * When the app starts, and again when the memory stick changes (this ends what ran before).
+ * `savedata` is PSP/SAVEDATA, `data` a folder of save sync's own, always one of this system's
+ * (its settings, its notes, the saves that were replaced). With a `store`, SAVEDATA is
+ * reached through it: a game's folders are copied into `data`/staging before they are looked
+ * at, and a save fetched from the service is written back from there; `savedata` is then only
+ * its name. `settings_from` are other folders of save sync's own, the first with settings
+ * giving them when `data` has none yet (the memory stick before). `say` shows the user a
+ * sentence and may be called from any thread. With the settings switched on, every game that
+ * has a save here is brought in line in the background.
  */
 void Start(const std::string& savedata, const std::string& data,
-           std::function<void(const std::string&)> say, const std::string& device_name);
+           std::function<void(const std::string&)> say, const std::string& device_name,
+           Store store = {}, const std::vector<std::string>& settings_from = {});
 [[nodiscard]] bool Started();
+/// Whether SAVEDATA is reached through a Store.
+[[nodiscard]] bool Staged();
+/// The folder of save sync's own it was started with; empty when it is not.
+[[nodiscard]] std::string DataFolder();
 /// Waits a moment for what is still to be sent, then ends.
 void Shutdown();
 

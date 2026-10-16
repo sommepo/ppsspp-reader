@@ -367,9 +367,10 @@ class ReaderScreensTest {
         }
         assertEquals(
             listOf(
-                ReaderSettings.KEY_SCREEN_TEXT, ReaderSettings.KEY_POPUP_SCALE, ReaderSettings.KEY_POPUP_AUTOHIDE,
-                ReaderSettings.KEY_POPUP_HEIGHT,
-                ReaderSettings.KEY_SCREEN_TEXT_OUTLINE,
+                ReaderSettings.KEY_SCREEN_TEXT, ReaderSettings.KEY_TOUCH_PLAY, ReaderSettings.KEY_POPUP_SCALE,
+                ReaderSettings.KEY_POPUP_AUTOHIDE,
+                ReaderSettings.KEY_POPUP_HEIGHT, ReaderSettings.KEY_CARD_CORNER,
+                ReaderSettings.KEY_WORD_MARK, ReaderSettings.KEY_SCREEN_TEXT_OUTLINE,
                 ReaderSettings.KEY_CURSOR_BUTTON, ReaderSettings.KEY_CURSOR_TOGGLE, ReaderSettings.KEY_CURSOR_FRAME,
                 ReaderSettings.KEY_POPUP_HIDE_ON_EXIT, ReaderSettings.KEY_CURSOR_HOME, ReaderSettings.KEY_SECOND_SCREEN, ReaderSettings.KEY_CURSOR_SPEED,
                 ReaderSettings.KEY_PANEL_ENABLED, ReaderSettings.KEY_PANEL_AUTO_HIDE,

@@ -6,7 +6,9 @@
 #include <functional>
 #include <QByteArray>
 #include <QHash>
+#include <QImage>
 #include <QObject>
+#include <QPointF>
 #include <QString>
 #include <QStringList>
 
@@ -56,6 +58,12 @@ private:
     [[nodiscard]] QString Status() const;
     [[nodiscard]] QString DescribeDialog() const;
     void Grab(const QString& file, const Reply& reply);
+    /// Pictures of what a player sees, `fps` a second for `ms`, written as DIR/f0000.png...
+    void Record(const QString& folder, int ms, int fps, const Reply& reply);
+    /// Composes one picture: the game's frame, the reader's layer, the popup, the pointer.
+    QImage Compose(const QImage& frame, bool pointer) const;
+    /// Where the channel last put the pointer, in the render window.
+    QPointF pointer_at{-1, -1};
     void SendPointer(const QPointF& position, int kind, Qt::KeyboardModifiers modifiers);
 
     QLocalServer* server{};

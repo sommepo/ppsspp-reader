@@ -316,6 +316,16 @@ std::string Engine::LastError() const {
     return last_error;
 }
 
+std::optional<Engine::AnswerCursor> Engine::Cursor() const {
+    std::scoped_lock lock{mutex};
+    return cursor;
+}
+
+void Engine::SetCursor(std::optional<AnswerCursor> cursor_) {
+    std::scoped_lock lock{mutex};
+    cursor = cursor_;
+}
+
 std::size_t Engine::HookCount() const {
     std::scoped_lock lock{mutex};
     return hooks.size();
@@ -425,6 +435,7 @@ void Engine::UnloadProfileLocked() {
     }
     has_hooks.store(!hooks.empty(), std::memory_order_relaxed);
     frame_callbacks.clear();
+    cursor.reset();
     state_callbacks.clear();
     if (lua) {
         LuaApi::CloseState(lua);

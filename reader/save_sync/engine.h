@@ -48,6 +48,11 @@ struct Game {
     /// name that is not this game's).
     std::function<std::vector<Folder>()> locate;
     std::function<std::optional<std::filesystem::path>(const std::string& label)> place;
+    /// Called once a save from elsewhere was put in place in these folders (inside Fetch,
+    /// before anything else touches them), with every folder it went to or was taken from: a
+    /// host whose folders are copies of the real ones writes them back. Throws ArchiveError
+    /// when it cannot; the fetch then failed.
+    std::function<void(const std::vector<Folder>& placed)> unpacked;
 };
 
 /// What this device notes about a save after syncing it: the service's version it is, and its

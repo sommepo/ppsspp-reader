@@ -5,10 +5,14 @@
 #include <cmath>
 #include <exception>
 #include <functional>
+#include <memory>
+#include <vector>
 #include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
 #include <QCursor>
+#include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -24,7 +28,9 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPen>
 #include <QPointer>
+#include <QPolygonF>
 #include <QTableWidget>
 #include <QTimer>
 #include <QTreeWidget>
@@ -147,6 +153,7 @@ void ReaderControl::Pump(QLocalSocket* socket) {
 
 void ReaderControl::SendPointer(const QPointF& position, int kind,
                                 Qt::KeyboardModifiers modifiers) {
+    pointer_at = position;
     const QPoint local = position.toPoint();
     const QPoint global = render_window->mapToGlobal(local);
     // Where the pointer is, for whoever asks where it is now rather than where the event was.
@@ -329,38 +336,100 @@ QString ReaderControl::DescribeDialog() const {
     return Json(root);
 }
 
-void ReaderControl::Grab(const QString& file, const Reply& reply) {
+QImage ReaderControl::Compose(const QImage& frame, bool pointer) const {
     // What a player would see: the game's picture where the window shows it, and over it
     // what the reader draws and the popup.
+    QImage canvas(render_window->size(), QImage::Format_ARGB32_Premultiplied);
+    canvas.fill(Qt::black);
+    QPainter painter(&canvas);
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    if (!frame.isNull()) {
+        painter.drawImage(controller->PictureArea(), frame);
+    }
+    ReaderOverlay* overlay = controller->Overlay();
+    if (overlay->isVisible()) {
+        painter.drawPixmap(0, 0, overlay->grab());
+    }
+    LookupPopup* popup = controller->Lookups().Popup();
+    if (popup->isVisible()) {
+        painter.drawPixmap(popup->mapToGlobal(QPoint(0, 0)) - render_window->mapToGlobal(QPoint(0, 0)),
+                           popup->grab());
+    }
+    AudioPrompt* prompt = controller->Lookups().Prompt();
+    if (prompt->isVisible()) {
+        painter.drawPixmap(prompt->mapToGlobal(QPoint(0, 0)) - render_window->mapToGlobal(QPoint(0, 0)),
+                           prompt->grab());
+    }
+    if (pointer && pointer_at.x() >= 0) {
+        // An arrow where the channel put the pointer (the stand-in screen draws none).
+        const QPointF p = pointer_at;
+        const QPolygonF arrow({p, p + QPointF(0, 19), p + QPointF(5, 14), p + QPointF(9, 22),
+                               p + QPointF(12, 21), p + QPointF(8, 13), p + QPointF(14, 13)});
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.setPen(QPen(QColor(20, 20, 30), 1.2));
+        painter.setBrush(Qt::white);
+        painter.drawPolygon(arrow);
+    }
+    painter.end();
+    return canvas;
+}
+
+void ReaderControl::Grab(const QString& file, const Reply& reply) {
     controller->CaptureFrame(1920, [this, file, reply](const QImage& frame) {
-        QImage canvas(render_window->size(), QImage::Format_ARGB32_Premultiplied);
-        canvas.fill(Qt::black);
-        QPainter painter(&canvas);
-        painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        if (!frame.isNull()) {
-            painter.drawImage(controller->PictureArea(), frame);
-        }
-        ReaderOverlay* overlay = controller->Overlay();
-        if (overlay->isVisible()) {
-            painter.drawPixmap(0, 0, overlay->grab());
-        }
-        LookupPopup* popup = controller->Lookups().Popup();
-        if (popup->isVisible()) {
-            painter.drawPixmap(popup->mapToGlobal(QPoint(0, 0)) -
-                                   render_window->mapToGlobal(QPoint(0, 0)),
-                               popup->grab());
-        }
-        AudioPrompt* prompt = controller->Lookups().Prompt();
-        if (prompt->isVisible()) {
-            painter.drawPixmap(prompt->mapToGlobal(QPoint(0, 0)) -
-                                   render_window->mapToGlobal(QPoint(0, 0)),
-                               prompt->grab());
-        }
-        painter.end();
+        const QImage canvas = Compose(frame, false);
         reply(canvas.save(file) ? QStringLiteral("OK %1%2").arg(file, frame.isNull()
                                                                           ? QStringLiteral(" (no frame)")
                                                                           : QString())
                                 : QStringLiteral("ERR cannot write ") + file);
+    });
+}
+
+void ReaderControl::Record(const QString& folder, int ms, int fps, const Reply& reply) {
+    // The game's frame is asked for again whenever the last one has come; the reader's layer
+    // and the popup are drawn at every tick, so the mark's glide is seen as it is drawn.
+    struct Take {
+        QImage frame;
+        bool asking = false;
+        std::vector<QImage> pictures;
+        QTimer timer;
+        QElapsedTimer clock;
+    };
+    auto take = std::make_shared<Take>();
+    QDir().mkpath(folder);
+    const int interval = std::max(10, 1000 / std::clamp(fps, 1, 60));
+    take->timer.setInterval(interval);
+    take->clock.start();
+    QObject::connect(&take->timer, &QTimer::timeout, this, [this, take, folder, ms, reply] {
+        if (!take->asking) {
+            take->asking = true;
+            controller->CaptureFrame(1920, [take](const QImage& frame) {
+                if (!frame.isNull()) {
+                    take->frame = frame;
+                }
+                take->asking = false;
+            });
+        }
+        take->pictures.push_back(Compose(take->frame, true));
+        if (take->clock.elapsed() < ms) {
+            return;
+        }
+        take->timer.stop();
+        int written = 0;
+        for (const QImage& picture : take->pictures) {
+            if (picture.save(QStringLiteral("%1/f%2.png").arg(folder).arg(written, 4, 10, QLatin1Char('0')))) {
+                ++written;
+            }
+        }
+        reply(QStringLiteral("OK %1 pictures in %2").arg(written).arg(folder));
+        // The timer's connection holds `take`: let it go, but not from inside its own timeout.
+        QTimer::singleShot(0, this, [take] { take->timer.disconnect(); });
+    });
+    // The first frame before the first tick.
+    take->asking = true;
+    controller->CaptureFrame(1920, [take](const QImage& frame) {
+        take->frame = frame;
+        take->asking = false;
+        take->timer.start();
     });
 }
 
@@ -489,6 +558,10 @@ void ReaderControl::Run(const QString& command, const Reply& reply) {
                                [reply] { reply(QStringLiteral("OK")); });
         } else if (name == QStringLiteral("grab")) {
             Grab(rest, reply);
+        } else if (name == QStringLiteral("record")) {
+            // record DIR MS [FPS]: pictures of what a player sees for the README's demos.
+            Record(parts.value(1), parts.value(2).toInt(), parts.size() > 3 ? parts.value(3).toInt() : 30,
+                   reply);
         } else if (name == QStringLiteral("shot")) {
             controller->CaptureFrame(1920, [rest, reply](const QImage& frame) {
                 reply(!frame.isNull() && frame.save(rest) ? QStringLiteral("OK ") + rest

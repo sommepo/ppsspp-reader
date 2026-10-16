@@ -3,6 +3,7 @@
 
 package org.ppsspp.ppsspp.reader
 
+import org.ppsspp.ppsspp.R
 import android.app.Activity
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -80,6 +81,9 @@ class ReaderOverlayTest {
     @Before
     fun setUp() {
         activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        // Of the reader's taps alone: touch play has tests of its own (ScreenTextOverlayTest).
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(activity).edit()
+            .putBoolean(ReaderSettings.KEY_TOUCH_PLAY, false).commit()
         activity.setTheme(com.google.android.material.R.style.Theme_Material3_DayNight_NoActionBar)
     }
 
@@ -261,6 +265,66 @@ class ReaderOverlayTest {
     }
 
     @Test
+    fun theAddButtonStandsInTheCornerTheSettingsChoose() {
+        installDictionary()
+        val preferences = androidx.preference.PreferenceManager.getDefaultSharedPreferences(activity)
+        val corners = listOf(null, "bottom_left", "bottom_right", "top_left", "top_right")
+        for (corner in corners) {
+            if (corner == null) preferences.edit().remove(ReaderSettings.KEY_CARD_CORNER).commit()
+            else preferences.edit().putString(ReaderSettings.KEY_CARD_CORNER, corner).commit()
+            build(1920, 1080)
+            overlay.onLine(presented())
+            layout()
+            val text = find<ReaderTextView>()!!
+            val (x, y) = centreOf(text, 10)
+            tap(x, y)
+            val popup = awaitPopup()
+            snapshot("lookup-card-corner-${corner ?: "default"}")
+            val label = activity.getString(R.string.reader_lookup_add)
+            val add = find<android.widget.ImageButton> { it.contentDescription == label && it.isShown }!!
+            // The headword's part the button belongs to: the frame that holds its row of boxes.
+            val part = add.parent.parent as View
+            val (bx, by) = positionInRoot(add)
+            val (px, py) = positionInRoot(part)
+            val centreX = bx + add.paddingLeft + (add.width - add.paddingLeft - add.paddingRight) / 2f
+            val centreY = by + add.paddingTop + (add.height - add.paddingTop - add.paddingBottom) / 2f
+            val left = centreX - px < part.width / 2f
+            val top = centreY - py < part.height / 2f
+            val wanted = corner ?: "bottom_left"
+            assertEquals("$wanted: left", wanted.endsWith("left"), left)
+            assertEquals("$wanted: top", wanted.startsWith("top"), top)
+            // No character of the headline or the senses lies under the box.
+            val boxLeft = bx + add.paddingLeft
+            val boxRight = bx + add.width - add.paddingRight
+            val boxTop = by + add.paddingTop
+            val boxBottom = by + add.height - add.paddingBottom
+            fun check(v: View) {
+                if (v is TextView && v !is android.widget.ImageButton && v.isShown && v.layout != null) {
+                    val (tx, ty) = positionInRoot(v)
+                    val layout = v.layout
+                    for (index in 0 until v.text.length) {
+                        val c = v.text[index]
+                        if (c == '\uFFFC' || c.isWhitespace()) continue
+                        val line = layout.getLineForOffset(index)
+                        val a = layout.getPrimaryHorizontal(index)
+                        val b = if (index + 1 < layout.getLineEnd(line)) layout.getPrimaryHorizontal(index + 1) else layout.getLineRight(line)
+                        val cl = tx + v.totalPaddingLeft + minOf(a, b)
+                        val cr = tx + v.totalPaddingLeft + maxOf(a, b)
+                        val ct = ty + v.totalPaddingTop + layout.getLineTop(line)
+                        val cb = ty + v.totalPaddingTop + layout.getLineBottom(line)
+                        val apart = cr <= boxLeft + 1 || cl >= boxRight - 1 || cb <= boxTop + 1 || ct >= boxBottom - 1
+                        assertTrue("$wanted: '$c' under the box", apart)
+                    }
+                }
+                if (v is ViewGroup) for (k in 0 until v.childCount) check(v.getChildAt(k))
+            }
+            check(part)
+            tap(5f, 5f)
+            idle()
+        }
+    }
+
+    @Test
     fun tappingACharacterLooksUpTheWordStartingThere() {
         installDictionary()
         build(1920, 1080)
@@ -290,16 +354,23 @@ class ReaderOverlayTest {
         assertEquals(0, gameTaps)
 
         // The matched word 見張れ (offsets 10 to 12) is marked in the panel.
-        val marked = text.text as android.text.Spanned
-        val mark = marked.getSpans(0, marked.length, android.text.style.BackgroundColorSpan::class.java).single()
-        assertEquals(10, marked.getSpanStart(mark))
-        assertEquals(13, marked.getSpanEnd(mark))
+        assertEquals(10..12, text.markedRange)
 
-        // The popup does not cover the panel, and both are on screen.
+        // The popup is on screen, right next to the word: just above or just below its row.
+
         val (_, popupY) = positionInRoot(popup)
+
         val (_, textY) = positionInRoot(text)
+
+        val row = text.boundsOf(10)
+
         assertTrue(popupY >= 0)
-        assertTrue("popup ends above the text panel", popupY + popup.height <= textY)
+
+        val gapAbove = textY + row.top - (popupY + popup.height)
+
+        val gapBelow = popupY - (textY + row.bottom)
+
+        assertTrue("popup ($popupY, ${popup.height} high) is next to the word's row ($row)", gapAbove in 0..40 || gapBelow in 0..40)
     }
 
     @Test
@@ -316,8 +387,7 @@ class ReaderOverlayTest {
 
         tap(30f, 30f) // far from both the popup and the panel
         assertEquals(View.GONE, popup.visibility)
-        val unmarked = text.text as android.text.Spanned
-        assertEquals(0, unmarked.getSpans(0, unmarked.length, android.text.style.BackgroundColorSpan::class.java).size)
+        assertEquals(null, text.markedRange)
         assertEquals("closing the popup must not click into the game", 0, gameTaps)
 
         // With the popup closed, the same spot belongs to the game again.

@@ -11,6 +11,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <sstream>
 #include <thread>
 #include <nlohmann/json.hpp>
@@ -34,8 +35,10 @@ std::string Utf8(const fs::path& path) {
 }
 
 struct Shared {
+    /// PSP/SAVEDATA, or with a store the copies of its folders.
     fs::path savedata;
     fs::path data;
+    Store store;
     std::function<void(const std::string&)> say;
 
     Engine engine;
@@ -59,6 +62,254 @@ std::mutex g_shared_mutex;
 std::shared_ptr<Shared> Current() {
     std::scoped_lock lock{g_shared_mutex};
     return g_shared;
+}
+
+std::string Join(const std::string& folder, const std::string& name) {
+    return folder.empty() ? name : folder + "/" + name;
+}
+
+std::string ReadNative(const fs::path& path) {
+    std::ifstream in{path, std::ios::binary};
+    std::stringstream content;
+    content << in.rdbuf();
+    if (!in) {
+        throw ArchiveError("a copy of a save could not be read (" + Utf8(path) + ")");
+    }
+    return content.str();
+}
+
+void WriteNative(const fs::path& path, std::string_view content) {
+    std::ofstream out{path, std::ios::binary | std::ios::trunc};
+    out.write(content.data(), static_cast<std::streamsize>(content.size()));
+    if (!out) {
+        throw ArchiveError("a copy of a save could not be written (" + Utf8(path) + ")");
+    }
+}
+
+void SetWrittenMs(const fs::path& path, std::int64_t ms) {
+    if (ms <= 0) {
+        return;
+    }
+    // The file clock's start is not the same everywhere: go by the distance from now.
+    const auto ago = std::chrono::system_clock::now() -
+                     std::chrono::system_clock::time_point{std::chrono::milliseconds{ms}};
+    std::error_code error;
+    fs::last_write_time(
+        path,
+        fs::file_time_type::clock::now() -
+            std::chrono::duration_cast<fs::file_time_type::duration>(ago),
+        error);
+}
+
+/// The folders of SAVEDATA in a store; throws when it cannot be read (an empty answer would
+/// look like a game without a save, which a fetch may then fill).
+std::vector<Store::Entry> StoreTop(const Store& store) {
+    std::vector<Store::Entry> top;
+    if (!store.list("", top)) {
+        throw ArchiveError("the memory stick's SAVEDATA folder could not be read");
+    }
+    return top;
+}
+
+/// Makes `here` a copy of the store's folder `path`: what differs is written, what the store
+/// no longer has is removed.
+void CopyIn(const Store& store, const std::string& path, const fs::path& here) {
+    std::vector<Store::Entry> entries;
+    if (!store.list(path, entries)) {
+        throw ArchiveError("a save folder on the memory stick could not be read (" + path + ")");
+    }
+    std::error_code error;
+    if (!fs::is_directory(here, error)) {
+        fs::remove(here, error);
+        fs::create_directories(here, error);
+        if (error) {
+            throw ArchiveError("no copy of a save could be made (" + Utf8(here) + ")");
+        }
+    }
+    std::set<std::string> kept;
+    for (const Store::Entry& entry : entries) {
+        const std::string below = Join(path, entry.name);
+        const fs::path target = here / FromUtf8(entry.name);
+        kept.insert(entry.name);
+        if (entry.folder) {
+            CopyIn(store, below, target);
+            continue;
+        }
+        std::string content;
+        if (!store.read(below, content)) {
+            throw ArchiveError("a file of a save on the memory stick could not be read (" +
+                               below + ")");
+        }
+        if (fs::is_directory(target, error)) {
+            fs::remove_all(target, error);
+        }
+        if (!fs::is_regular_file(target, error) || ReadNative(target) != content) {
+            WriteNative(target, content);
+            SetWrittenMs(target, entry.modified_ms);
+        }
+    }
+    std::vector<fs::path> gone;
+    for (fs::directory_iterator walk{here, error}, end; !error && walk != end;
+         walk.increment(error)) {
+        if (!kept.contains(Utf8(walk->path().filename()))) {
+            gone.push_back(walk->path());
+        }
+    }
+    for (const fs::path& path_gone : gone) {
+        fs::remove_all(path_gone, error);
+    }
+}
+
+/// A game's folders of a store, as copies in `staging` brought up to date.
+std::vector<Folder> CopyInGame(const Store& store, const fs::path& staging,
+                               const std::string& disc) {
+    std::vector<Folder> folders;
+    for (const Store::Entry& entry : StoreTop(store)) {
+        if (!entry.folder || !IsSaveFolderOf(disc, entry.name)) {
+            continue;
+        }
+        const fs::path here = staging / FromUtf8(entry.name);
+        CopyIn(store, entry.name, here);
+        folders.push_back({entry.name, here});
+    }
+    // Copies of folders the memory stick no longer has.
+    std::error_code error;
+    std::vector<fs::path> gone;
+    for (fs::directory_iterator walk{staging, error}, end; !error && walk != end;
+         walk.increment(error)) {
+        const std::string name = Utf8(walk->path().filename());
+        const bool known = std::any_of(folders.begin(), folders.end(),
+                                       [&](const Folder& f) { return f.label == name; });
+        if (!known && IsSaveFolderOf(disc, name)) {
+            gone.push_back(walk->path());
+        }
+    }
+    for (const fs::path& path : gone) {
+        fs::remove_all(path, error);
+    }
+    std::sort(folders.begin(), folders.end(),
+              [](const Folder& a, const Folder& b) { return a.label < b.label; });
+    return folders;
+}
+
+/// Writes the copy `here` into the store's folder `path`, which was just made.
+void CopyOut(const Store& store, const fs::path& here, const std::string& path) {
+    std::error_code error;
+    std::vector<fs::path> entries;
+    for (fs::directory_iterator walk{here, error}, end; !error && walk != end;
+         walk.increment(error)) {
+        entries.push_back(walk->path());
+    }
+    if (error) {
+        throw ArchiveError("a copy of a save could not be read (" + Utf8(here) + ")");
+    }
+    std::sort(entries.begin(), entries.end());
+    for (const fs::path& entry : entries) {
+        const std::string below = Join(path, Utf8(entry.filename()));
+        if (fs::is_directory(entry, error)) {
+            if (!store.make_folder(below)) {
+                throw ArchiveError("a folder could not be made on the memory stick (" + below +
+                                   ")");
+            }
+            CopyOut(store, entry, below);
+        } else if (fs::is_regular_file(entry, error)) {
+            if (!store.write(below, ReadNative(entry))) {
+                throw ArchiveError("a file could not be written on the memory stick (" +
+                                   below + ")");
+            }
+        }
+    }
+}
+
+/**
+ * After a fetch: the copies of a game's folders go back to the store. Every folder is first
+ * written beside its old one (a name no game's folder has: IsSaveFolderOf); only when all of
+ * them are there do they take the old ones' places, so that a failure on the way leaves the
+ * memory stick's save as it was. The old save is in the backups by then (Unpack).
+ */
+void WriteBack(const Store& store, const std::vector<Folder>& placed) {
+    constexpr const char* NewSuffix = ".savesync-new";
+    constexpr const char* OldSuffix = ".savesync-old";
+    const std::vector<Store::Entry> top = StoreTop(store);
+    const auto there = [&](const std::string& name) {
+        return std::any_of(top.begin(), top.end(), [&](const Store::Entry& entry) {
+            return entry.folder && entry.name == name;
+        });
+    };
+    std::vector<std::string> written;
+    const auto drop_written = [&] {
+        for (const std::string& name : written) {
+            store.remove(name + NewSuffix);
+        }
+    };
+    try {
+        for (const Folder& folder : placed) {
+            std::error_code error;
+            if (!fs::is_directory(folder.path, error)) {
+                continue;
+            }
+            const std::string fresh = folder.label + NewSuffix;
+            store.remove(fresh);
+            written.push_back(folder.label);
+            if (!store.make_folder(fresh)) {
+                throw ArchiveError("a folder could not be made on the memory stick (" + fresh +
+                                   ")");
+            }
+            CopyOut(store, folder.path, fresh);
+        }
+    } catch (...) {
+        drop_written();
+        throw;
+    }
+    for (const Folder& folder : placed) {
+        const std::string& name = folder.label;
+        const bool fresh = std::find(written.begin(), written.end(), name) != written.end();
+        if (!fresh) {
+            // The save fetched has nothing for it.
+            if (there(name) && !store.remove(name)) {
+                throw ArchiveError("a folder of the old save could not be removed from the "
+                                   "memory stick (" + name + ")");
+            }
+            continue;
+        }
+        const std::string old = name + OldSuffix;
+        const bool had = there(name);
+        if (had) {
+            store.remove(old);
+            if (!store.rename(name, old)) {
+                drop_written();
+                throw ArchiveError("the old save could not be moved aside on the memory stick (" +
+                                   name + ")");
+            }
+        }
+        if (!store.rename(name + NewSuffix, name)) {
+            if (had) {
+                store.rename(old, name);
+            }
+            drop_written();
+            throw ArchiveError("the save could not be put in place on the memory stick (" +
+                               name + ")");
+        }
+        if (had) {
+            store.remove(old);
+        }
+    }
+}
+
+std::vector<std::string> DiscsIn(const std::vector<std::string>& folders) {
+    std::vector<std::string> discs;
+    for (const std::string& folder : folders) {
+        if (folder.size() < 9) {
+            continue;
+        }
+        const std::string disc = folder.substr(0, 9);
+        if (IsSaveFolderOf(disc, folder) &&
+            std::find(discs.begin(), discs.end(), disc) == discs.end()) {
+            discs.push_back(disc);
+        }
+    }
+    std::sort(discs.begin(), discs.end());
+    return discs;
 }
 
 Game GameFor(const Shared& shared, const std::string& disc, const std::string& name) {
@@ -86,6 +337,11 @@ Game GameFor(const Shared& shared, const std::string& disc, const std::string& n
         }
         return savedata / FromUtf8(label);
     };
+    if (shared.store) {
+        const Store store = shared.store;
+        game.locate = [store, savedata, disc] { return CopyInGame(store, savedata, disc); };
+        game.unpacked = [store](const std::vector<Folder>& placed) { WriteBack(store, placed); };
+    }
     return game;
 }
 
@@ -124,9 +380,18 @@ void SaveSettings(Shared& shared) {
     fs::rename(fresh, file, error);
 }
 
-void LoadSettings(Shared& shared, const std::string& device_name) {
+void LoadSettings(Shared& shared, const std::string& device_name,
+                  const std::vector<std::string>& settings_from) {
     shared.settings.device = device_name;
     std::ifstream in{shared.data / "settings.json", std::ios::binary};
+    bool carried = false;
+    for (const std::string& other : settings_from) {
+        if (in) {
+            break;
+        }
+        in = std::ifstream{FromUtf8(other) / "settings.json", std::ios::binary};
+        carried = static_cast<bool>(in);
+    }
     if (!in) {
         return;
     }
@@ -146,6 +411,9 @@ void LoadSettings(Shared& shared, const std::string& device_name) {
                 shared.names[disc] = name.get<std::string>();
             }
         }
+    }
+    if (carried) {
+        SaveSettings(shared);
     }
 }
 
@@ -256,8 +524,20 @@ void Background(const std::shared_ptr<Shared>& shared, Work work) {
 }
 
 std::vector<Game> GamesHere(Shared& shared) {
+    std::vector<std::string> discs;
+    if (shared.store) {
+        std::vector<std::string> folders;
+        for (const Store::Entry& entry : StoreTop(shared.store)) {
+            if (entry.folder) {
+                folders.push_back(entry.name);
+            }
+        }
+        discs = DiscsIn(folders);
+    } else {
+        discs = DiscsWithSaves(Utf8(shared.savedata));
+    }
     std::vector<Game> games;
-    for (const std::string& disc : DiscsWithSaves(Utf8(shared.savedata))) {
+    for (const std::string& disc : discs) {
         games.push_back(GameFor(shared, disc, NameOf(shared, disc)));
     }
     return games;
@@ -321,32 +601,33 @@ bool IsSaveFolderOf(std::string_view disc, std::string_view folder) {
 }
 
 std::vector<std::string> DiscsWithSaves(const std::string& savedata) {
-    std::vector<std::string> discs;
+    std::vector<std::string> folders;
     std::error_code error;
     for (fs::directory_iterator walk{FromUtf8(savedata), error}, end; !error && walk != end;
          walk.increment(error)) {
-        const std::string folder = Utf8(walk->path().filename());
-        if (folder.size() < 9 || !walk->is_directory(error)) {
-            continue;
-        }
-        const std::string disc = folder.substr(0, 9);
-        if (IsSaveFolderOf(disc, folder) &&
-            std::find(discs.begin(), discs.end(), disc) == discs.end()) {
-            discs.push_back(disc);
+        if (walk->is_directory(error)) {
+            folders.push_back(Utf8(walk->path().filename()));
         }
     }
-    std::sort(discs.begin(), discs.end());
-    return discs;
+    return DiscsIn(folders);
 }
 
 void Start(const std::string& savedata, const std::string& data,
-           std::function<void(const std::string&)> say, const std::string& device_name) {
+           std::function<void(const std::string&)> say, const std::string& device_name,
+           Store store, const std::vector<std::string>& settings_from) {
+    // What ran before, on another memory stick: nothing of it may reach this one.
+    Shutdown();
     try {
         auto shared = std::make_shared<Shared>();
-        shared->savedata = FromUtf8(savedata);
         shared->data = FromUtf8(data);
+        shared->store = std::move(store);
+        shared->savedata = shared->store ? shared->data / "staging" : FromUtf8(savedata);
         shared->say = std::move(say);
-        LoadSettings(*shared, device_name);
+        if (shared->store) {
+            std::error_code error;
+            fs::create_directories(shared->savedata, error);
+        }
+        LoadSettings(*shared, device_name, settings_from);
         std::weak_ptr<Shared> weak = shared;
         shared->engine.SetListener([weak](const Result& result) {
             if (const auto alive = weak.lock()) {
@@ -365,6 +646,16 @@ void Start(const std::string& savedata, const std::string& data,
 
 bool Started() {
     return Current() != nullptr;
+}
+
+bool Staged() {
+    const auto shared = Current();
+    return shared && shared->store;
+}
+
+std::string DataFolder() {
+    const auto shared = Current();
+    return shared ? Utf8(shared->data) : std::string{};
 }
 
 void Shutdown() {
@@ -508,6 +799,8 @@ void SyncAll() {
             return;
         }
         shared->engine.SyncAll(GamesHere(*shared));
+    } catch (const ArchiveError& error) {
+        SetStatus(*shared, std::string{"Save sync: "} + error.what() + ".");
     } catch (...) {
     }
 }

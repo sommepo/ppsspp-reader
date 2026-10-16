@@ -139,6 +139,8 @@ class ReaderSettingsActivity : ReaderScreen() {
     class SectionPage : PreferenceFragmentCompat() {
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             val section = section(requireArguments().getString(SECTION)) ?: Section.LOOKUP
+            // Play by touch's first value depends on the device: kept before its switch shows it.
+            ReaderSettings(requireContext()).keepTouchPlayDefault()
             setPreferencesFromResource(section.preferences, rootKey)
             // A published build has no save sync service to send statistics to.
             if (!org.ppsspp.ppsspp.BuildConfig.READER_SAVE_SYNC) {

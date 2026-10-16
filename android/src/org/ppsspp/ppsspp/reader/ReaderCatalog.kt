@@ -22,7 +22,19 @@ data class ProfileInfo(
      * a game whose lines have no voices; empty when it says nothing. The user's own choice for
      * the game goes before it.
      */
-    val audio: String = ""
+    val audio: String = "",
+    /**
+     * How the game is played by touch alone ("-- reader: touch <how>"): [TOUCH_GAME], it takes
+     * touches itself; [TOUCH_PRESS], the reader presses its buttons for the taps; empty, it is
+     * not played by touch (taps are as without touch play).
+     */
+    val touch: String = "",
+    /**
+     * The console's buttons that playing by touch still needs, where a tap cannot do it
+     * ("-- reader: buttons up down circle square"): shown as a column of round buttons while
+     * Play by touch is on. Empty for most games.
+     */
+    val buttons: List<String> = emptyList()
 )
 
 /**
@@ -40,6 +52,15 @@ object ReaderCatalog {
 
     @Volatile
     private var audioSaid: Map<String, String>? = null
+
+    const val TOUCH_GAME = "game"
+    const val TOUCH_PRESS = "press"
+
+    @Volatile
+    private var touchSaid: Map<String, String>? = null
+
+    @Volatile
+    private var buttonsSaid: Map<String, List<String>>? = null
 
     /**
      * Reads the lines "-- reader: <key> <value>" among the comments a profile begins with:
@@ -64,7 +85,9 @@ object ReaderCatalog {
             said["reads"].orEmpty(),
             said["version"].orEmpty(),
             own,
-            said["audio"].orEmpty().lowercase()
+            said["audio"].orEmpty().lowercase(),
+            said["touch"].orEmpty().lowercase().takeIf { it == TOUCH_GAME || it == TOUCH_PRESS }.orEmpty(),
+            said["buttons"].orEmpty().lowercase().split(' ').filter { it.isNotBlank() }
         )
     }
 
@@ -89,6 +112,8 @@ object ReaderCatalog {
         }
         known = games.keys.toSet()
         audioSaid = games.values.filter { it.audio.isNotEmpty() }.associate { it.titleId to it.audio }
+        touchSaid = games.values.filter { it.touch.isNotEmpty() }.associate { it.titleId to it.touch }
+        buttonsSaid = games.values.filter { it.buttons.isNotEmpty() }.associate { it.titleId to it.buttons }
         return games.values.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
     }
 
@@ -105,10 +130,26 @@ object ReaderCatalog {
         return ReaderSettings.CardAudio.of(audioSaid?.get(titleId.uppercase()))
     }
 
+    /** How the profile of the game [titleId] says it is played by touch: TOUCH_GAME, TOUCH_PRESS or "". */
+    fun touch(context: Context, titleId: String): String {
+        if (titleId.isEmpty()) return ""
+        if (touchSaid == null) games(context)
+        return touchSaid?.get(titleId.uppercase()).orEmpty()
+    }
+
+    /** The buttons the profile of the game [titleId] says playing by touch still needs. */
+    fun buttons(context: Context, titleId: String): List<String> {
+        if (titleId.isEmpty()) return emptyList()
+        if (buttonsSaid == null) games(context)
+        return buttonsSaid?.get(titleId.uppercase()).orEmpty()
+    }
+
     /** Looks again at the next question: for tests, and after a profile was added or removed. */
     fun forget() {
         known = null
         audioSaid = null
+        touchSaid = null
+        buttonsSaid = null
     }
 
     private fun bundledIds(context: Context): List<String> = try {

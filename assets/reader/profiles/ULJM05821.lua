@@ -1,6 +1,8 @@
 -- reader: no hooks
 -- reader: title CHAOS;HEAD らぶChu☆Chu! (Chaos;Head Love Chu Chu!)
 -- reader: reads The message window and the lines in the middle of the screen, with furigana
+-- reader: touch press
+-- reader: buttons up down circle cross square
 -- reader: version ULJM-05821
 -- CHAOS;HEAD らぶChu☆Chu! (5pb./Nitroplus, PSP, 2011), ULJM-05821. EBOOT.BIN 667BCE2C.
 --
